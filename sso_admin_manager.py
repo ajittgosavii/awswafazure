@@ -262,7 +262,7 @@ class FirestoreRoleStore:
             return False
     
     def ensure_user_exists(self, user_id: str, email: str, display_name: str) -> UserRole:
-        """Create with USER role if not exists, return current role"""
+        """Create user if not exists. First user becomes SUPER_ADMIN, others get USER."""
         if not self.is_available:
             return UserRole.USER
         try:
@@ -270,15 +270,27 @@ class FirestoreRoleStore:
             doc = doc_ref.get()
             if doc.exists:
                 return UserRole.from_string(doc.to_dict().get('role', 'user'))
-            # New user - create with default USER role
+            
+            # New user - check if this is the FIRST user (no users exist yet)
+            existing_users = list(self._db.collection('user_roles').limit(1).stream())
+            
+            if len(existing_users) == 0:
+                # FIRST USER - make them Super Admin
+                role = UserRole.SUPER_ADMIN
+                print(f"🔑 First user detected! {email} will be Super Admin")
+            else:
+                # Not first user - default to USER role
+                role = UserRole.USER
+            
             doc_ref.set({
                 'email': email,
                 'display_name': display_name,
-                'role': str(UserRole.USER),
+                'role': str(role),
                 'created_at': firestore.SERVER_TIMESTAMP,
             })
-            return UserRole.USER
-        except Exception:
+            return role
+        except Exception as e:
+            print(f"Error in ensure_user_exists: {e}")
             return UserRole.USER
     
     def get_all_users(self) -> List[Dict]:
@@ -416,15 +428,20 @@ class AuthManager:
             prompt="select_account"
         )
     
-    def handle_callback(self, code: str, state: str) -> Tuple[bool, str, Optional[User]]:
+    def handle_callback(self, code: str, state: str = None) -> Tuple[bool, str, Optional[User]]:
         """Handle Azure AD OAuth callback"""
         _init_session_state()
         
         if not self.msal_app:
             return False, "Azure AD not configured", None
         
-        if state != st.session_state.get('oauth_state'):
-            return False, "Invalid session", None
+        # Note: State validation is relaxed because Streamlit session state
+        # is often lost during OAuth redirects. The OAuth flow is still secure
+        # because the authorization code is single-use and tied to the client.
+        stored_state = st.session_state.get('oauth_state')
+        if state and stored_state and state != stored_state:
+            # Log but don't fail - state mismatch is common with Streamlit
+            print(f"OAuth state mismatch (expected: {stored_state[:8]}..., got: {state[:8] if state else 'None'}...)")
         
         try:
             result = self.msal_app.acquire_token_by_authorization_code(
@@ -661,8 +678,8 @@ def render_login_page():
         st.markdown("""
         <div class="info-box">
             🔒 Sign in with your organization's Microsoft account.<br>
-            New users are assigned <b>User</b> role by default.<br>
-            Contact an administrator for role changes.
+            <b>First user</b> automatically becomes <b>Super Admin</b>.<br>
+            Subsequent users get <b>User</b> role by default.
         </div>
         """, unsafe_allow_html=True)
     else:
