@@ -1,0 +1,127 @@
+# AWS WAF Scanner - Enterprise Edition
+# Version: 4.0.0 with Complete Enterprise Features
+# All 10 Major Enhancements Included
+
+# ============================================================================
+# CORE FRAMEWORK
+# ============================================================================
+streamlit>=1.28.0                # Web interface
+click>=8.1.0                      # CLI tool for CI/CD integration
+
+# ============================================================================
+# AI INTEGRATION
+# ============================================================================
+anthropic>=0.18.0                 # Claude API for AI-powered analysis
+
+# ============================================================================
+# AWS INTEGRATION
+# ============================================================================
+boto3>=1.34.0                     # AWS SDK
+botocore>=1.34.0                  # AWS core library
+
+# ============================================================================
+# MULTI-ACCOUNT CONFIGURATION
+# ============================================================================
+pyyaml>=6.0                       # YAML configuration files
+
+# ============================================================================
+# DATA PROCESSING & ANALYTICS
+# ============================================================================
+pandas>=2.0.0                     # Data manipulation and analysis
+numpy>=1.24.0                     # Numerical computing (pandas dependency)
+
+# ============================================================================
+# INTERACTIVE VISUALIZATIONS
+# ============================================================================
+plotly>=5.17.0                    # Interactive charts (7 chart types)
+kaleido>=0.2.1                    # Static image export for Plotly
+
+# ============================================================================
+# DATABASE & HISTORICAL TRACKING
+# ============================================================================
+# Note: sqlite3 is included in Python standard library
+# Database features: 11 tables, full audit trail, trend analysis
+
+# ============================================================================
+# DOCUMENT GENERATION
+# ============================================================================
+python-docx>=0.8.11               # Word document creation
+reportlab>=4.0.0                  # PDF generation
+Pillow>=10.0.0                    # Image processing
+
+# ============================================================================
+# FIREBASE AUTHENTICATION (Optional)
+# ============================================================================
+firebase-admin>=6.2.0             # Firebase Admin SDK
+pyrebase4>=4.7.0                  # Firebase client library
+google-cloud-firestore>=2.11.0    # Firestore database
+python-dotenv>=1.0.0              # Environment variable management
+
+# ============================================================================
+# DEPENDENCY MAPPING & GRAPH VISUALIZATION (Optional)
+# ============================================================================
+networkx>=3.1                     # Graph analysis for resource dependencies
+pyvis>=0.3.2                      # Interactive network visualization
+
+# ============================================================================
+# UTILITIES
+# ============================================================================
+python-dateutil>=2.8.2            # Date/time utilities
+requests>=2.31.0                  # HTTP library
+
+# ============================================================================
+# CI/CD INTEGRATION
+# ============================================================================
+# Note: No additional packages needed for CLI tool
+# Supports: GitHub Actions, GitLab CI, JSON/SARIF/JUnit/Markdown output
+
+# ============================================================================
+# COMPLIANCE & COST ANALYSIS
+# ============================================================================
+# Note: No additional packages needed
+# Built-in support for: CIS, PCI-DSS, HIPAA, SOC2, NIST CSF
+
+# ============================================================================
+# DEVELOPMENT & TESTING (Optional)
+# ============================================================================
+pytest>=7.4.0                     # Testing framework
+pytest-cov>=4.1.0                 # Code coverage
+black>=23.0.0                     # Code formatter
+flake8>=6.0.0                     # Linter
+
+# ============================================================================
+# INSTALLATION NOTES
+# ============================================================================
+# 
+# Quick Install:
+#   pip install -r requirements.txt
+# 
+# Minimal Install (Core Features Only):
+#   pip install streamlit boto3 pandas plotly click anthropic
+# 
+# With Firebase SSO:
+#   pip install -r requirements.txt
+# 
+# With Dependency Mapping:
+#   pip install -r requirements.txt
+# 
+# Development Install:
+#   pip install -r requirements.txt
+#   pip install pytest pytest-cov black flake8
+# 
+# ============================================================================
+# FEATURES ENABLED BY THESE PACKAGES
+# ============================================================================
+#
+# ✅ Historical Tracking (pandas, sqlite3)
+# ✅ Interactive Dashboards (plotly, streamlit)
+# ✅ Compliance Mapping (built-in, no extra packages)
+# ✅ Cost Calculator (built-in, no extra packages)
+# ✅ Automated Remediation (built-in, no extra packages)
+# ✅ CI/CD Integration (click for CLI)
+# ✅ Team Collaboration (sqlite3 for database)
+# ✅ Resource Dependencies (networkx, pyvis - optional)
+# ✅ Firebase Auth (firebase-admin, pyrebase4 - optional)
+# ✅ Multi-Account Scanning (boto3, yaml)
+#
+# ============================================================================
