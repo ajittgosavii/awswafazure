@@ -663,7 +663,25 @@ class SessionManager:
         if not SessionManager.is_authenticated():
             return None
         data = st.session_state.get('current_user')
-        return User.from_dict(data) if data else None
+        if not data:
+            return None
+        
+        user = User.from_dict(data)
+        
+        # ALWAYS refresh role from Firestore
+        try:
+            role_store = FirestoreRoleStore()
+            fresh_role = role_store._get_role_by_email(user.email)
+            if fresh_role:
+                user.role = fresh_role
+                # Update session state too
+                data['role'] = str(fresh_role)
+                st.session_state.current_user = data
+                st.session_state.user_role = fresh_role
+        except Exception as e:
+            print(f"Error refreshing role: {e}")
+        
+        return user
     
     @staticmethod
     def has_permission(permission: str) -> bool:
