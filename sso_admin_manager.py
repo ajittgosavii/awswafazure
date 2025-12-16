@@ -1013,6 +1013,78 @@ def render_initial_setup_page():
 def render_login_page():
     """Render the full-screen professional login page with Infosys branding"""
     
+    # Initialize session state early to prevent errors
+    if 'local_users' not in st.session_state:
+        st.session_state.local_users = {}
+    if 'audit_logs' not in st.session_state:
+        st.session_state.audit_logs = []
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    
+    # Handle Azure AD callback FIRST (before any other rendering)
+    query_params = st.query_params
+    if 'code' in query_params:
+        try:
+            azure_config = st.secrets.get("azure_ad", {})
+            if azure_config.get("tenant_id") and azure_config.get("client_id"):
+                import msal
+                import requests as req
+                
+                code = query_params.get('code')
+                state = query_params.get('state')
+                stored_state = st.session_state.get('oauth_state')
+                
+                if state and stored_state and state == stored_state:
+                    authority = f"https://login.microsoftonline.com/{azure_config['tenant_id']}"
+                    msal_app = msal.ConfidentialClientApplication(
+                        client_id=azure_config['client_id'],
+                        client_credential=azure_config['client_secret'],
+                        authority=authority
+                    )
+                    
+                    result = msal_app.acquire_token_by_authorization_code(
+                        code=code,
+                        scopes=["User.Read"],
+                        redirect_uri=azure_config.get('redirect_uri', 'http://localhost:8501')
+                    )
+                    
+                    if 'access_token' in result:
+                        headers = {'Authorization': f'Bearer {result["access_token"]}'}
+                        user_response = req.get(
+                            "https://graph.microsoft.com/v1.0/me",
+                            headers=headers,
+                            timeout=10
+                        )
+                        
+                        if user_response.status_code == 200:
+                            user_data = user_response.json()
+                            azure_user = User(
+                                uid=user_data.get('id', f"azure-{uuid.uuid4().hex[:8]}"),
+                                email=user_data.get('mail') or user_data.get('userPrincipalName', ''),
+                                display_name=user_data.get('displayName', 'Azure User'),
+                                role=UserRole.USER,
+                                organization_id="Azure AD",
+                                last_login=datetime.now(),
+                                active=True,
+                            )
+                            SessionManager.login(azure_user)
+                            st.query_params.clear()
+                            st.success(f"✅ Welcome, {azure_user.display_name}!")
+                            st.balloons()
+                            st.rerun()
+                            return
+                    elif 'error' in result:
+                        st.error(f"Azure AD error: {result.get('error_description', result.get('error'))}")
+                        st.query_params.clear()
+                else:
+                    st.warning("Session expired. Please sign in again.")
+                    st.query_params.clear()
+        except ImportError:
+            st.query_params.clear()  # Clear params if MSAL not available
+        except Exception as e:
+            st.error(f"Azure AD login error: {str(e)}")
+            st.query_params.clear()
+    
     # Check if initial setup is needed
     try:
         auth_mgr = get_auth_manager()
@@ -1189,62 +1261,6 @@ def render_login_page():
                     azure_ad_configured = False
         except Exception:
             pass
-        
-        # Handle Azure AD callback
-        query_params = st.query_params
-        if 'code' in query_params and azure_ad_configured:
-            try:
-                import msal
-                import requests
-                
-                azure_config = st.secrets.get("azure_ad", {})
-                code = query_params.get('code')
-                state = query_params.get('state')
-                
-                # Validate state
-                stored_state = st.session_state.get('oauth_state')
-                if state and stored_state and state == stored_state:
-                    authority = f"https://login.microsoftonline.com/{azure_config['tenant_id']}"
-                    msal_app = msal.ConfidentialClientApplication(
-                        client_id=azure_config['client_id'],
-                        client_credential=azure_config['client_secret'],
-                        authority=authority
-                    )
-                    
-                    result = msal_app.acquire_token_by_authorization_code(
-                        code=code,
-                        scopes=["User.Read"],
-                        redirect_uri=azure_config.get('redirect_uri', 'http://localhost:8501')
-                    )
-                    
-                    if 'access_token' in result:
-                        # Get user info from Microsoft Graph
-                        headers = {'Authorization': f'Bearer {result["access_token"]}'}
-                        user_response = requests.get(
-                            "https://graph.microsoft.com/v1.0/me",
-                            headers=headers,
-                            timeout=10
-                        )
-                        
-                        if user_response.status_code == 200:
-                            user_data = user_response.json()
-                            # Create user session
-                            azure_user = User(
-                                uid=user_data.get('id', f"azure-{uuid.uuid4().hex[:8]}"),
-                                email=user_data.get('mail') or user_data.get('userPrincipalName', ''),
-                                display_name=user_data.get('displayName', 'Azure User'),
-                                role=UserRole.USER,
-                                organization_id="Azure AD",
-                                last_login=datetime.now(),
-                                active=True,
-                            )
-                            SessionManager.login(azure_user)
-                            st.query_params.clear()
-                            st.success(f"✅ Welcome, {azure_user.display_name}!")
-                            st.rerun()
-            except Exception as e:
-                st.error(f"Azure AD login error: {str(e)}")
-                st.query_params.clear()
         
         # Show Microsoft Sign-In Button
         if azure_ad_configured and azure_auth_url:
