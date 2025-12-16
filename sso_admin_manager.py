@@ -265,8 +265,31 @@ class FirestoreRoleStore:
         """Create user if not exists. First user becomes SUPER_ADMIN, others get USER."""
         if not self.is_available:
             return UserRole.USER
+        
         try:
             doc_ref = self._db.collection('user_roles').document(user_id)
+            
+            # FIRST: Check if this email is configured as super_admin in secrets
+            # This takes priority over everything else
+            try:
+                super_admin_email = st.secrets.get("azure_ad", {}).get("super_admin_email", "")
+                if super_admin_email:
+                    # Normalize both emails for comparison
+                    if email.lower().strip() == super_admin_email.lower().strip():
+                        # FORCE update to Super Admin - always
+                        doc_ref.set({
+                            'email': email,
+                            'display_name': display_name,
+                            'role': 'super_admin',
+                            'updated_at': firestore.SERVER_TIMESTAMP,
+                            'is_configured_admin': True,
+                        }, merge=True)
+                        print(f"✅ SUPER ADMIN configured: {email}")
+                        return UserRole.SUPER_ADMIN
+            except Exception as e:
+                print(f"Error checking super_admin_email: {e}")
+            
+            # Check if user already exists
             doc = doc_ref.get()
             if doc.exists:
                 return UserRole.from_string(doc.to_dict().get('role', 'user'))
@@ -343,8 +366,15 @@ class AzureADConfig:
     def get_config(cls) -> Dict:
         try:
             cfg = st.secrets.get("azure_ad", {})
+            # Use 'common' for multi-tenant + personal accounts
+            # Use 'organizations' for multi-tenant org accounts only
+            # Use 'consumers' for personal accounts only
+            # Use specific tenant_id for single tenant
+            tenant = cfg.get("tenant_id", "common")
+            if tenant.lower() in ["multi", "multitenant", "all", ""]:
+                tenant = "common"
             return {
-                "tenant_id": cfg.get("tenant_id", ""),
+                "tenant_id": tenant,
                 "client_id": cfg.get("client_id", ""),
                 "client_secret": cfg.get("client_secret", ""),
                 "redirect_uri": cfg.get("redirect_uri", "http://localhost:8501"),
