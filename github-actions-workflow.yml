@@ -1,0 +1,273 @@
+name: AWS WAF Security Scan
+
+on:
+  # Run on pull requests
+  pull_request:
+    branches: [ main, develop ]
+  
+  # Run on pushes to main
+  push:
+    branches: [ main ]
+  
+  # Daily scan at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: 'AWS Account ID to scan'
+        required: false
+      fail_on:
+        description: 'Fail on severity level'
+        required: false
+        default: 'critical'
+        type: choice
+        options:
+          - critical
+          - high
+          - medium
+          - low
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  waf-scan:
+    name: WAF Security Scan
+    runs-on: ubuntu-latest
+    
+    # Required permissions for GitHub Actions
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      checks: write
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install click boto3 pandas plotly streamlit
+      
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: 🔍 Run WAF Scan
+        id: scan
+        env:
+          ACCOUNT_ID: ${{ github.event.inputs.account_id || secrets.AWS_ACCOUNT_ID }}
+          FAIL_ON: ${{ github.event.inputs.fail_on || 'critical' }}
+        run: |
+          python waf_cli.py scan \
+            --account-id $ACCOUNT_ID \
+            --region us-east-1 \
+            --output waf-report.json \
+            --format json \
+            --fail-on $FAIL_ON \
+            --max-critical 0 \
+            --max-high 5 \
+            --min-waf-score 75
+          
+          # Extract metrics for GitHub summary
+          TOTAL=$(jq -r '.total_findings' waf-report.json)
+          CRITICAL=$(jq -r '.critical_count' waf-report.json)
+          HIGH=$(jq -r '.high_count' waf-report.json)
+          SCORE=$(jq -r '.overall_waf_score' waf-report.json)
+          
+          echo "total_findings=$TOTAL" >> $GITHUB_OUTPUT
+          echo "critical_count=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high_count=$HIGH" >> $GITHUB_OUTPUT
+          echo "waf_score=$SCORE" >> $GITHUB_OUTPUT
+      
+      - name: 📊 Generate SARIF report
+        run: |
+          python waf_cli.py scan \
+            --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
+            --region us-east-1 \
+            --output waf-report.sarif \
+            --format sarif
+      
+      - name: 📤 Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: waf-report.sarif
+          category: waf-security-scan
+      
+      - name: 📋 Generate Markdown report
+        run: |
+          python waf_cli.py scan \
+            --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
+            --region us-east-1 \
+            --output waf-report.md \
+            --format markdown
+      
+      - name: 💬 Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('waf-report.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              body: report
+            });
+      
+      - name: 📁 Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: waf-scan-reports
+          path: |
+            waf-report.json
+            waf-report.sarif
+            waf-report.md
+          retention-days: 90
+      
+      - name: 📈 Create job summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          # 🔐 AWS WAF Security Scan Results
+          
+          ## 📊 Summary
+          
+          | Metric | Value |
+          |--------|-------|
+          | Total Findings | ${{ steps.scan.outputs.total_findings }} |
+          | Critical | ${{ steps.scan.outputs.critical_count }} |
+          | High | ${{ steps.scan.outputs.high_count }} |
+          | **WAF Score** | **${{ steps.scan.outputs.waf_score }}/100** |
+          
+          ## 🎯 Status
+          
+          EOF
+          
+          if [ "${{ steps.scan.outputs.critical_count }}" -gt 0 ]; then
+            echo "❌ **FAILED**: Critical findings must be resolved" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.scan.outputs.high_count }}" -gt 5 ]; then
+            echo "⚠️  **WARNING**: High severity findings detected" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **PASSED**: No critical issues found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[📄 View Full Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 🚨 Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "❌ WAF Security Scan Failed",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ WAF Security Scan Failed"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n${{ github.repository }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Critical:*\n${{ steps.scan.outputs.critical_count }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*WAF Score:*\n${{ steps.scan.outputs.waf_score }}/100"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Run"
+                      },
+                      "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+
+  # Trend analysis job (runs after scan)
+  trend-analysis:
+    name: Analyze Security Trends
+    runs-on: ubuntu-latest
+    needs: waf-scan
+    if: github.event_name == 'schedule' || github.event_name == 'push'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 📊 Download historical reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: waf-scan-reports-*
+          path: historical-reports/
+      
+      - name: 📈 Generate trend report
+        run: |
+          python -c "
+          import json
+          import glob
+          from datetime import datetime
+          
+          reports = []
+          for file in glob.glob('historical-reports/**/waf-report.json', recursive=True):
+              with open(file) as f:
+                  reports.append(json.load(f))
+          
+          # Sort by date
+          reports.sort(key=lambda x: x.get('scan_date', ''))
+          
+          print('## 📈 Security Trend Analysis')
+          print()
+          print('| Date | Findings | Critical | High | WAF Score |')
+          print('|------|----------|----------|------|-----------|')
+          
+          for report in reports[-10:]:  # Last 10 scans
+              date = report.get('scan_date', 'N/A')[:10]
+              total = report.get('total_findings', 0)
+              critical = report.get('critical_count', 0)
+              high = report.get('high_count', 0)
+              score = report.get('overall_waf_score', 0)
+              print(f'| {date} | {total} | {critical} | {high} | {score:.1f} |')
+          " >> $GITHUB_STEP_SUMMARY
