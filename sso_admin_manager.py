@@ -267,83 +267,100 @@ class FirestoreRoleStore:
             return UserRole.USER
         
         try:
-            doc_ref = self._db.collection('user_roles').document(user_id)
-            
             # FIRST: Check if this email is configured as super_admin in secrets
-            # This takes priority over everything else
             try:
                 super_admin_email = st.secrets.get("azure_ad", {}).get("super_admin_email", "")
                 if super_admin_email:
-                    # Normalize emails for comparison
                     email_lower = email.lower().strip()
                     admin_lower = super_admin_email.lower().strip()
                     
-                    # Check direct match
                     is_admin = (email_lower == admin_lower)
                     
-                    # Also check if external user format matches
-                    # Azure AD formats external emails like: user_domain.com#EXT#@tenant.onmicrosoft.com
                     if not is_admin and "#ext#" in email_lower:
-                        # Extract the original email from external format
-                        # e.g., "user_hotmail.com#EXT#@tenant.onmicrosoft.com" -> "user@hotmail.com"
                         try:
-                            ext_part = email_lower.split("#ext#")[0]  # "user_hotmail.com"
-                            # Replace last underscore with @
+                            ext_part = email_lower.split("#ext#")[0]
                             if "_" in ext_part:
-                                parts = ext_part.rsplit("_", 1)  # Split from right
+                                parts = ext_part.rsplit("_", 1)
                                 original_email = f"{parts[0]}@{parts[1]}"
                                 is_admin = (original_email == admin_lower)
                         except:
                             pass
                     
-                    # Also check if configured email contains the base email
                     if not is_admin:
-                        # Extract base email (before @) for partial matching
                         admin_base = admin_lower.split("@")[0] if "@" in admin_lower else admin_lower
                         is_admin = admin_base in email_lower
                     
                     if is_admin:
-                        # FORCE update to Super Admin - always
-                        doc_ref.set({
-                            'email': email,
-                            'display_name': display_name,
-                            'role': 'super_admin',
-                            'updated_at': firestore.SERVER_TIMESTAMP,
-                            'is_configured_admin': True,
-                        }, merge=True)
+                        # Update by email query
+                        self._update_role_by_email(email, display_name, 'super_admin')
                         print(f"✅ SUPER ADMIN configured: {email}")
                         return UserRole.SUPER_ADMIN
-                    else:
-                        print(f"❌ Email mismatch: '{email}' vs configured '{super_admin_email}'")
             except Exception as e:
                 print(f"Error checking super_admin_email: {e}")
             
-            # Check if user already exists
-            doc = doc_ref.get()
-            if doc.exists:
-                return UserRole.from_string(doc.to_dict().get('role', 'user'))
+            # Look up user by EMAIL (not by document ID)
+            existing_role = self._get_role_by_email(email)
+            if existing_role:
+                return existing_role
             
-            # New user - check if this is the FIRST user (no users exist yet)
+            # New user - check if this is the FIRST user
             existing_users = list(self._db.collection('user_roles').limit(1).stream())
             
             if len(existing_users) == 0:
-                # FIRST USER - make them Super Admin
                 role = UserRole.SUPER_ADMIN
                 print(f"🔑 First user detected! {email} will be Super Admin")
             else:
-                # Not first user - default to USER role
                 role = UserRole.USER
             
-            doc_ref.set({
+            # Create new document
+            self._db.collection('user_roles').add({
                 'email': email,
                 'display_name': display_name,
                 'role': str(role),
+                'azure_user_id': user_id,
                 'created_at': firestore.SERVER_TIMESTAMP,
             })
             return role
         except Exception as e:
             print(f"Error in ensure_user_exists: {e}")
             return UserRole.USER
+    
+    def _get_role_by_email(self, email: str) -> Optional[UserRole]:
+        """Get user role by email"""
+        if not self.is_available:
+            return None
+        try:
+            docs = self._db.collection('user_roles').where('email', '==', email).limit(1).stream()
+            for doc in docs:
+                return UserRole.from_string(doc.to_dict().get('role', 'user'))
+            return None
+        except Exception:
+            return None
+    
+    def _update_role_by_email(self, email: str, display_name: str, role: str):
+        """Update user role by email"""
+        if not self.is_available:
+            return
+        try:
+            docs = self._db.collection('user_roles').where('email', '==', email).limit(1).stream()
+            for doc in docs:
+                doc.reference.update({
+                    'role': role,
+                    'display_name': display_name,
+                    'updated_at': firestore.SERVER_TIMESTAMP,
+                    'is_configured_admin': True,
+                })
+                return
+            # If not found, create new
+            self._db.collection('user_roles').add({
+                'email': email,
+                'display_name': display_name,
+                'role': role,
+                'created_at': firestore.SERVER_TIMESTAMP,
+                'is_configured_admin': True,
+            })
+        except Exception as e:
+            print(f"Error updating role by email: {e}")
     
     def get_all_users(self) -> List[Dict]:
         """Get all users with roles"""
