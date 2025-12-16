@@ -348,6 +348,14 @@ class AzureADAuthManager:
     
     def handle_callback(self, code: str, state: str = None) -> Tuple[bool, str, Optional[User]]:
         """Handle OAuth callback"""
+        # Initialize session state FIRST before any other operations
+        if 'local_users' not in st.session_state:
+            st.session_state.local_users = {}
+        if 'audit_logs' not in st.session_state:
+            st.session_state.audit_logs = []
+        if 'authenticated' not in st.session_state:
+            st.session_state.authenticated = False
+            
         if not self._initialized:
             return False, "Azure AD not initialized", None
         
@@ -449,10 +457,16 @@ class AzureADAuthManager:
     
     def _save_user_to_store(self, user: User):
         """Save user to local store"""
+        # Ensure session state is initialized
+        if 'local_users' not in st.session_state:
+            st.session_state.local_users = {}
         st.session_state.local_users[user.email] = user.to_dict()
     
     def _log_action(self, user_id: str, user_email: str, action: str, details: Dict):
         """Log action"""
+        # Ensure session state is initialized
+        if 'audit_logs' not in st.session_state:
+            st.session_state.audit_logs = []
         st.session_state.audit_logs.append({
             'id': str(uuid.uuid4()),
             'timestamp': datetime.now().isoformat(),
@@ -468,9 +482,17 @@ class AzureADAuthManager:
     # USER MANAGEMENT (Admin Panel)
     # =========================================================================
     
+    def _ensure_session_state(self):
+        """Ensure session state is initialized"""
+        if 'local_users' not in st.session_state:
+            st.session_state.local_users = {}
+        if 'audit_logs' not in st.session_state:
+            st.session_state.audit_logs = []
+    
     def create_user(self, email: str, password: str, display_name: str,
                    role: str, organization_id: str) -> Tuple[bool, str, Optional[User]]:
         """Create a new user"""
+        self._ensure_session_state()
         start_time = time.time()
         current_user = SessionManager.get_current_user()
         created_by = current_user.email if current_user else "system"
@@ -495,6 +517,7 @@ class AzureADAuthManager:
     
     def authenticate(self, email: str, password: str) -> Tuple[bool, str, Optional[User]]:
         """Authenticate with email/password"""
+        self._ensure_session_state()
         user_data = st.session_state.local_users.get(email)
         
         if not user_data:
@@ -513,6 +536,7 @@ class AzureADAuthManager:
     
     def update_user(self, uid: str, updates: Dict) -> Tuple[bool, str]:
         """Update user"""
+        self._ensure_session_state()
         for email, user_data in st.session_state.local_users.items():
             if user_data.get('id') == uid or user_data.get('uid') == uid:
                 for key, value in updates.items():
@@ -530,6 +554,7 @@ class AzureADAuthManager:
     
     def delete_user(self, uid: str) -> Tuple[bool, str]:
         """Deactivate user"""
+        self._ensure_session_state()
         for email, user_data in st.session_state.local_users.items():
             if user_data.get('id') == uid or user_data.get('uid') == uid:
                 user_data['active'] = False
@@ -542,6 +567,7 @@ class AzureADAuthManager:
     
     def get_all_users(self, force_refresh: bool = False) -> List[User]:
         """Get all users"""
+        self._ensure_session_state()
         users = []
         for email, user_data in st.session_state.local_users.items():
             try:
@@ -690,6 +716,9 @@ def check_tab_access(tab_name: str) -> bool:
 
 def render_login_page():
     """Render Infosys-branded login page with Azure AD / Microsoft SSO"""
+    # Initialize session state FIRST
+    _init_session_state()
+    
     auth_manager = get_auth_manager()
     
     # OAuth callback handling
@@ -1180,9 +1209,19 @@ def _render_audit_logs(auth_mgr):
 
 _auth_manager_instance = None
 
+def _init_session_state():
+    """Initialize session state for authentication"""
+    if 'local_users' not in st.session_state:
+        st.session_state.local_users = {}
+    if 'audit_logs' not in st.session_state:
+        st.session_state.audit_logs = []
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+
 def get_auth_manager() -> AzureADAuthManager:
     """Get singleton instance"""
     global _auth_manager_instance
+    _init_session_state()  # Always ensure session state is initialized
     if _auth_manager_instance is None:
         _auth_manager_instance = AzureADAuthManager()
     return _auth_manager_instance
@@ -1190,6 +1229,7 @@ def get_auth_manager() -> AzureADAuthManager:
 
 def init_authentication():
     """Initialize authentication"""
+    _init_session_state()
     get_auth_manager()
 
 
