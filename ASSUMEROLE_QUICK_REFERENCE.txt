@@ -1,0 +1,175 @@
+================================================================================
+🔒 ASSUMEROLE QUICK REFERENCE CARD
+================================================================================
+
+WHAT IS ASSUMEROLE?
+-------------------
+Secure way to access AWS without sharing long-term credentials.
+App gets temporary credentials that expire automatically.
+
+WHY USE IT?
+-----------
+✅ More secure (temp credentials expire)
+✅ Better audit trail  
+✅ Industry standard
+✅ Easy to revoke access
+
+================================================================================
+SINGLE ACCOUNT SETUP
+================================================================================
+
+ORGANIZATION (Account Being Scanned):
+--------------------------------------
+1. Create role: WAFAdvisorRole
+2. Trust policy: Allow scanner's account/user to assume
+3. Add External ID for security
+4. Attach ReadOnlyAccess policy
+5. Provide: Role ARN + External ID
+
+SCANNER (Running Tool):
+-----------------------
+1. Add sts:AssumeRole permission to your IAM user
+2. In tool: AWS Connector → AssumeRole tab
+3. Enter base credentials
+4. Enter role ARN + External ID
+5. Test, then Connect
+
+SECRETS.TOML FORMAT:
+--------------------
+[aws]
+access_key_id = "AKIA..."           # Your credentials
+secret_access_key = "..."
+role_arn = "arn:aws:iam::222222222222:role/WAFAdvisorRole"
+external_id = "secure-id-123"
+
+================================================================================
+MULTI-ACCOUNT SETUP
+================================================================================
+
+ORGANIZATION (Multiple Accounts):
+----------------------------------
+1. Choose hub account (management/security)
+2. Create WAFAdvisorRole in EACH target account
+3. Same role name in all accounts
+4. Trust policy allows hub account
+5. Same External ID for all
+6. Grant hub user sts:AssumeRole permission
+7. Provide: Hub creds + Role name + External ID + Account IDs
+
+SCANNER (Running Tool):
+-----------------------
+1. In tool: Switch to Multi-Account mode
+2. AssumeRole Setup tab
+3. Enter hub account credentials
+4. Add each account with:
+   - Account name
+   - Account ID
+   - Role name (e.g., WAFAdvisorRole)
+   - External ID
+5. Test each account
+6. Run scan
+
+SECRETS.TOML FORMAT:
+--------------------
+[aws]
+access_key_id = "AKIA..."           # Hub account
+secret_access_key = "..."
+
+[[aws.accounts]]
+account_name = "Production"
+account_id = "222222222222"
+role_name = "WAFAdvisorRole"
+external_id = "org-id-2024"
+
+[[aws.accounts]]
+account_name = "Development"
+account_id = "333333333333"
+role_name = "WAFAdvisorRole"
+external_id = "org-id-2024"
+
+================================================================================
+IAM POLICIES
+================================================================================
+
+TRUST POLICY (On Target Role):
+-------------------------------
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "AWS": "arn:aws:iam::111111111111:user/scanner"
+    },
+    "Action": "sts:AssumeRole",
+    "Condition": {
+      "StringEquals": {
+        "sts:ExternalId": "your-external-id"
+      }
+    }
+  }]
+}
+
+PERMISSION POLICY (For Scanner's User):
+----------------------------------------
+{
+  "Effect": "Allow",
+  "Action": "sts:AssumeRole",
+  "Resource": "arn:aws:iam::222222222222:role/WAFAdvisorRole"
+}
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+ERROR: "Not authorized to perform sts:AssumeRole"
+FIX: Add sts:AssumeRole permission to scanner's IAM user
+
+ERROR: "Access denied"  
+FIX: Check trust policy allows your account/user
+
+ERROR: "External ID mismatch"
+FIX: Ensure External ID matches in trust policy and tool config
+
+ERROR: "Role doesn't exist"
+FIX: Verify role ARN is correct
+
+================================================================================
+TESTING
+================================================================================
+
+Before scanning:
+1. Click "Test AssumeRole" button
+2. Should show: ✅ Success + Account ID + Expiration
+3. If test fails, check IAM policies
+4. Once test passes, click "Assume Role & Connect"
+
+================================================================================
+SECURITY TIPS
+================================================================================
+
+✅ Always use External ID
+✅ Generate random External ID: openssl rand -hex 32
+✅ Use ReadOnlyAccess permissions only
+✅ Monitor AssumeRole calls in CloudTrail
+✅ Rotate External ID every 90 days
+✅ Test in dev before production
+
+================================================================================
+COMPARISON: CREDENTIALS VS ASSUMEROLE
+================================================================================
+
+Direct Credentials:
+❌ Long-term credentials
+❌ Manual rotation needed
+⚠️ Limited visibility
+
+AssumeRole:
+✅ Temporary credentials (1-12 hours)
+✅ Auto-rotates
+✅ Clear audit trail
+✅ Easy to revoke
+✅ Enterprise standard
+
+RECOMMENDATION: Use AssumeRole for production!
+
+================================================================================

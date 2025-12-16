@@ -1,0 +1,174 @@
+# AWS WAF Scanner Enterprise - Git Ignore Rules
+# ==============================================
+
+# =====================
+# SECRETS & CREDENTIALS
+# =====================
+# NEVER commit secrets!
+.streamlit/secrets.toml
+secrets.toml
+*.secrets
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+
+# AWS credentials
+.aws/
+aws_credentials*
+*.env
+
+# Firebase credentials
+firebase-adminsdk*.json
+serviceAccountKey.json
+
+# =====================
+# PYTHON ARTIFACTS
+# =====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.virtualenv/
+
+# =====================
+# IDE & EDITOR
+# =====================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-*
+.spyderproject
+.spyproject
+.ropeproject
+
+# =====================
+# TESTING & COVERAGE
+# =====================
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# =====================
+# DATABASE & CACHE
+# =====================
+*.db
+*.sqlite
+*.sqlite3
+waf_assessments.db
+*.cache
+.cache/
+
+# =====================
+# LOGS & REPORTS
+# =====================
+*.log
+logs/
+log/
+*.out
+waf-report*.json
+waf-report*.sarif
+waf-report*.md
+scan_results/
+reports/
+
+# =====================
+# OS FILES
+# =====================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =====================
+# TEMPORARY FILES
+# =====================
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# =====================
+# BUILD ARTIFACTS
+# =====================
+*.manifest
+*.spec
+
+# =====================
+# JUPYTER NOTEBOOKS
+# =====================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# =====================
+# DOCUMENTATION BUILD
+# =====================
+docs/_build/
+site/
+
+# =====================
+# STREAMLIT SPECIFIC
+# =====================
+# Allow config.toml but not secrets
+!.streamlit/config.toml
+.streamlit/secrets.toml
+
+# =====================
+# PROJECT SPECIFIC
+# =====================
+# Backup files
+*_backup.py
+*_OLD.py
+*.py.backup
+
+# Local development configs
+local_config.py
+dev_settings.py
+
+# Generated PDF/Word reports (keep examples)
+*.pdf
+*.docx
+!docs/*.pdf
+!examples/*.pdf

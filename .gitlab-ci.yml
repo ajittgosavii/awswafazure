@@ -1,0 +1,318 @@
+# AWS WAF Security Scanner - GitLab CI/CD Pipeline
+
+variables:
+  PYTHON_VERSION: "3.10"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  ACCOUNT_ID: "${AWS_ACCOUNT_ID}"
+  AWS_DEFAULT_REGION: "us-east-1"
+
+# Cache Python dependencies
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+# Define stages
+stages:
+  - scan
+  - analyze
+  - report
+  - notify
+
+# Base job for Python setup
+.python-base:
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - python -V
+    - pip install virtualenv
+    - virtualenv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+    - pip install click boto3 pandas plotly streamlit
+
+# WAF Security Scan Job
+waf-scan:
+  extends: .python-base
+  stage: scan
+  
+  script:
+    # Configure AWS credentials from CI/CD variables
+    - export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+    - export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+    
+    # Run WAF scan
+    - |
+      python waf_cli.py scan \
+        --account-id ${ACCOUNT_ID} \
+        --region ${AWS_DEFAULT_REGION} \
+        --output waf-report.json \
+        --format json \
+        --fail-on critical \
+        --max-critical 0 \
+        --max-high 5 \
+        --min-waf-score 75
+    
+    # Generate additional formats
+    - python waf_cli.py scan --account-id ${ACCOUNT_ID} --output waf-report.sarif --format sarif
+    - python waf_cli.py scan --account-id ${ACCOUNT_ID} --output waf-report.md --format markdown
+    - python waf_cli.py scan --account-id ${ACCOUNT_ID} --output waf-report.xml --format junit
+    
+    # Extract metrics
+    - export TOTAL_FINDINGS=$(jq -r '.total_findings' waf-report.json)
+    - export CRITICAL_COUNT=$(jq -r '.critical_count' waf-report.json)
+    - export HIGH_COUNT=$(jq -r '.high_count' waf-report.json)
+    - export WAF_SCORE=$(jq -r '.overall_waf_score' waf-report.json)
+    
+    # Save metrics for other jobs
+    - echo "TOTAL_FINDINGS=${TOTAL_FINDINGS}" > metrics.env
+    - echo "CRITICAL_COUNT=${CRITICAL_COUNT}" >> metrics.env
+    - echo "HIGH_COUNT=${HIGH_COUNT}" >> metrics.env
+    - echo "WAF_SCORE=${WAF_SCORE}" >> metrics.env
+  
+  artifacts:
+    reports:
+      junit: waf-report.xml
+    paths:
+      - waf-report.json
+      - waf-report.sarif
+      - waf-report.md
+      - waf-report.xml
+      - metrics.env
+    expire_in: 90 days
+  
+  # Run on merge requests and main branch
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+# Security Dashboard Upload
+security-dashboard:
+  extends: .python-base
+  stage: analyze
+  needs: ["waf-scan"]
+  
+  script:
+    # Upload SARIF to GitLab Security Dashboard
+    - echo "Uploading security findings to GitLab Security Dashboard"
+  
+  artifacts:
+    reports:
+      sast: waf-report.sarif
+  
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# Quality Gates Check
+quality-gates:
+  extends: .python-base
+  stage: analyze
+  needs: ["waf-scan"]
+  
+  script:
+    - source metrics.env
+    
+    # Check quality gates
+    - |
+      echo "📏 Quality Gates Check"
+      echo "━━━━━━━━━━━━━━━━━━━━━"
+      echo "Total Findings: ${TOTAL_FINDINGS}"
+      echo "Critical: ${CRITICAL_COUNT}"
+      echo "High: ${HIGH_COUNT}"
+      echo "WAF Score: ${WAF_SCORE}/100"
+      echo ""
+    
+    # Fail if critical findings exist
+    - |
+      if [ "${CRITICAL_COUNT}" -gt 0 ]; then
+        echo "❌ FAILED: ${CRITICAL_COUNT} critical findings must be resolved"
+        exit 1
+      fi
+    
+    # Warn if too many high findings
+    - |
+      if [ "${HIGH_COUNT}" -gt 5 ]; then
+        echo "⚠️  WARNING: ${HIGH_COUNT} high severity findings detected"
+      fi
+    
+    # Check minimum score
+    - |
+      if (( $(echo "${WAF_SCORE} < 75" | bc -l) )); then
+        echo "❌ FAILED: WAF score ${WAF_SCORE} is below minimum 75"
+        exit 1
+      fi
+    
+    - echo "✅ Quality gates PASSED"
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# Merge Request Comment
+mr-comment:
+  image: alpine:latest
+  stage: report
+  needs: ["waf-scan"]
+  
+  before_script:
+    - apk add --no-cache curl jq
+  
+  script:
+    - source metrics.env
+    
+    # Create comment body
+    - |
+      COMMENT_BODY=$(cat <<EOF
+      ## 🔐 AWS WAF Security Scan Results
+      
+      **Scan Summary:**
+      - Total Findings: ${TOTAL_FINDINGS}
+      - Critical: ${CRITICAL_COUNT}
+      - High: ${HIGH_COUNT}
+      - WAF Score: ${WAF_SCORE}/100
+      
+      **Status:** $(if [ "${CRITICAL_COUNT}" -gt 0 ]; then echo "❌ FAILED"; else echo "✅ PASSED"; fi)
+      
+      [📄 View Full Report](${CI_JOB_URL}/artifacts/browse)
+      EOF
+      )
+    
+    # Post comment to merge request
+    - |
+      curl --request POST \
+        --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+        --data "body=${COMMENT_BODY}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# Slack Notification
+notify-slack:
+  image: alpine:latest
+  stage: notify
+  needs: ["waf-scan", "quality-gates"]
+  
+  before_script:
+    - apk add --no-cache curl jq
+  
+  script:
+    - source metrics.env
+    
+    # Determine status
+    - |
+      if [ "${CRITICAL_COUNT}" -gt 0 ]; then
+        STATUS="❌ FAILED"
+        COLOR="#dc3545"
+      elif [ "${HIGH_COUNT}" -gt 5 ]; then
+        STATUS="⚠️  WARNING"
+        COLOR="#ffc107"
+      else
+        STATUS="✅ PASSED"
+        COLOR="#28a745"
+      fi
+    
+    # Send Slack notification
+    - |
+      curl -X POST ${SLACK_WEBHOOK_URL} \
+        -H 'Content-Type: application/json' \
+        -d "{
+          \"attachments\": [{
+            \"color\": \"${COLOR}\",
+            \"title\": \"${STATUS} - WAF Security Scan\",
+            \"fields\": [
+              {
+                \"title\": \"Project\",
+                \"value\": \"${CI_PROJECT_NAME}\",
+                \"short\": true
+              },
+              {
+                \"title\": \"Branch\",
+                \"value\": \"${CI_COMMIT_REF_NAME}\",
+                \"short\": true
+              },
+              {
+                \"title\": \"Total Findings\",
+                \"value\": \"${TOTAL_FINDINGS}\",
+                \"short\": true
+              },
+              {
+                \"title\": \"Critical\",
+                \"value\": \"${CRITICAL_COUNT}\",
+                \"short\": true
+              },
+              {
+                \"title\": \"High\",
+                \"value\": \"${HIGH_COUNT}\",
+                \"short\": true
+              },
+              {
+                \"title\": \"WAF Score\",
+                \"value\": \"${WAF_SCORE}/100\",
+                \"short\": true
+              }
+            ],
+            \"actions\": [{
+              \"type\": \"button\",
+              \"text\": \"View Pipeline\",
+              \"url\": \"${CI_PIPELINE_URL}\"
+            }]
+          }]
+        }"
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  
+  when: always
+
+# Trend Analysis (scheduled scans only)
+trend-analysis:
+  extends: .python-base
+  stage: report
+  needs: ["waf-scan"]
+  
+  script:
+    # Store scan result in database or S3 for historical tracking
+    - |
+      python -c "
+      import json
+      from datetime import datetime
+      
+      with open('waf-report.json') as f:
+          report = json.load(f)
+      
+      # In production, store in database
+      print('Storing scan results for trend analysis...')
+      print(f\"Scan Date: {report.get('scan_date')}\")
+      print(f\"Total Findings: {report.get('total_findings')}\")
+      print(f\"WAF Score: {report.get('overall_waf_score')}\")
+      "
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+# Weekly Report (scheduled job)
+weekly-report:
+  extends: .python-base
+  stage: report
+  
+  script:
+    # Generate weekly digest
+    - echo "Generating weekly security digest..."
+    - python generate_weekly_digest.py
+  
+  artifacts:
+    paths:
+      - weekly-digest.pdf
+    expire_in: 1 year
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: manual
+  
+  only:
+    variables:
+      - $WEEKLY_REPORT == "true"
