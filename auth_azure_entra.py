@@ -262,9 +262,32 @@ class FirestoreRoleStore:
             try:
                 super_admin_email = st.secrets.get("azure_ad", {}).get("super_admin_email", "")
                 if super_admin_email:
-                    # Normalize both emails for comparison
-                    if email.lower().strip() == super_admin_email.lower().strip():
-                        # FORCE update to Super Admin - always
+                    # Normalize emails for comparison
+                    email_lower = email.lower().strip()
+                    admin_lower = super_admin_email.lower().strip()
+                    
+                    # Check direct match
+                    is_admin = (email_lower == admin_lower)
+                    
+                    # Also check if external user format matches
+                    # Azure AD formats external emails like: user_domain.com#EXT#@tenant.onmicrosoft.com
+                    if not is_admin and "#ext#" in email_lower:
+                        # Extract the original email from external format
+                        try:
+                            ext_part = email_lower.split("#ext#")[0]
+                            if "_" in ext_part:
+                                parts = ext_part.rsplit("_", 1)
+                                original_email = f"{parts[0]}@{parts[1]}"
+                                is_admin = (original_email == admin_lower)
+                        except:
+                            pass
+                    
+                    # Also check if configured email contains the base email
+                    if not is_admin:
+                        admin_base = admin_lower.split("@")[0] if "@" in admin_lower else admin_lower
+                        is_admin = admin_base in email_lower
+                    
+                    if is_admin:
                         doc_ref.set({
                             'email': email,
                             'display_name': display_name,
@@ -282,15 +305,13 @@ class FirestoreRoleStore:
             if doc.exists:
                 return UserRole.from_string(doc.to_dict().get('role', 'user'))
             
-            # New user - check if this is the FIRST user (no users exist yet)
+            # New user - check if this is the FIRST user
             existing_users = list(self._db.collection('user_roles').limit(1).stream())
             
             if len(existing_users) == 0:
-                # FIRST USER - make them Super Admin
                 role = UserRole.SUPER_ADMIN
                 print(f"🔑 First user detected! {email} will be Super Admin")
             else:
-                # Not first user - default to USER role
                 role = UserRole.USER
             
             doc_ref.set({
