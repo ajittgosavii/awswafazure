@@ -255,24 +255,16 @@ class FirestoreRoleStore:
             return UserRole.USER
         
         try:
-            doc_ref = self._db.collection('user_roles').document(user_id)
-            
             # FIRST: Check if this email is configured as super_admin in secrets
-            # This takes priority over everything else
             try:
                 super_admin_email = st.secrets.get("azure_ad", {}).get("super_admin_email", "")
                 if super_admin_email:
-                    # Normalize emails for comparison
                     email_lower = email.lower().strip()
                     admin_lower = super_admin_email.lower().strip()
                     
-                    # Check direct match
                     is_admin = (email_lower == admin_lower)
                     
-                    # Also check if external user format matches
-                    # Azure AD formats external emails like: user_domain.com#EXT#@tenant.onmicrosoft.com
                     if not is_admin and "#ext#" in email_lower:
-                        # Extract the original email from external format
                         try:
                             ext_part = email_lower.split("#ext#")[0]
                             if "_" in ext_part:
@@ -282,30 +274,23 @@ class FirestoreRoleStore:
                         except:
                             pass
                     
-                    # Also check if configured email contains the base email
                     if not is_admin:
                         admin_base = admin_lower.split("@")[0] if "@" in admin_lower else admin_lower
                         is_admin = admin_base in email_lower
                     
                     if is_admin:
-                        doc_ref.set({
-                            'email': email,
-                            'display_name': display_name,
-                            'role': 'super_admin',
-                            'updated_at': firestore.SERVER_TIMESTAMP,
-                            'is_configured_admin': True,
-                        }, merge=True)
+                        self._update_role_by_email(email, display_name, 'super_admin')
                         print(f"✅ SUPER ADMIN configured: {email}")
                         return UserRole.SUPER_ADMIN
             except Exception as e:
                 print(f"Error checking super_admin_email: {e}")
             
-            # Check if user already exists
-            doc = doc_ref.get()
-            if doc.exists:
-                return UserRole.from_string(doc.to_dict().get('role', 'user'))
+            # Look up user by EMAIL
+            existing_role = self._get_role_by_email(email)
+            if existing_role:
+                return existing_role
             
-            # New user - check if this is the FIRST user
+            # New user - check if FIRST user
             existing_users = list(self._db.collection('user_roles').limit(1).stream())
             
             if len(existing_users) == 0:
@@ -314,16 +299,53 @@ class FirestoreRoleStore:
             else:
                 role = UserRole.USER
             
-            doc_ref.set({
+            self._db.collection('user_roles').add({
                 'email': email,
                 'display_name': display_name,
                 'role': str(role),
+                'azure_user_id': user_id,
                 'created_at': firestore.SERVER_TIMESTAMP,
             })
             return role
         except Exception as e:
             print(f"Error in ensure_user_exists: {e}")
             return UserRole.USER
+    
+    def _get_role_by_email(self, email: str) -> Optional[UserRole]:
+        """Get user role by email"""
+        if not self.is_available:
+            return None
+        try:
+            docs = self._db.collection('user_roles').where('email', '==', email).limit(1).stream()
+            for doc in docs:
+                return UserRole.from_string(doc.to_dict().get('role', 'user'))
+            return None
+        except Exception:
+            return None
+    
+    def _update_role_by_email(self, email: str, display_name: str, role: str):
+        """Update user role by email"""
+        if not self.is_available:
+            return
+        try:
+            docs = self._db.collection('user_roles').where('email', '==', email).limit(1).stream()
+            for doc in docs:
+                doc.reference.update({
+                    'role': role,
+                    'display_name': display_name,
+                    'updated_at': firestore.SERVER_TIMESTAMP,
+                    'is_configured_admin': True,
+                })
+                return
+            self._db.collection('user_roles').add({
+                'email': email,
+                'display_name': display_name,
+                'role': role,
+                'created_at': firestore.SERVER_TIMESTAMP,
+                'is_configured_admin': True,
+            })
+        except Exception as e:
+            print(f"Error updating role by email: {e}")
             print(f"Error in ensure_user_exists: {e}")
             return UserRole.USER
     
@@ -584,7 +606,6 @@ class SessionManager:
     def is_authenticated() -> bool:
         if not st.session_state.get('authenticated'):
             return False
-        # Check session timeout
         login_time = st.session_state.get('login_time')
         if login_time:
             elapsed = datetime.now() - datetime.fromisoformat(login_time)
@@ -598,7 +619,25 @@ class SessionManager:
         if not SessionManager.is_authenticated():
             return None
         data = st.session_state.get('current_user')
-        return User.from_dict(data) if data else None
+        if not data:
+            return None
+        
+        user = User.from_dict(data)
+        
+        # ALWAYS refresh role from Firestore
+        try:
+            role_store = FirestoreRoleStore()
+            fresh_role = role_store._get_role_by_email(user.email)
+            if fresh_role:
+                user.role = fresh_role
+                # Update session state
+                data['role'] = str(fresh_role)
+                st.session_state.current_user = data
+                st.session_state.user_role = fresh_role
+        except Exception as e:
+            print(f"Error refreshing role: {e}")
+        
+        return user
     
     @staticmethod
     def has_permission(permission: str) -> bool:
