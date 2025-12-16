@@ -33,6 +33,13 @@ import hashlib
 import uuid
 import os
 
+# For Azure AD authentication
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+
 # ============================================================================
 # ROLE DEFINITIONS
 # ============================================================================
@@ -1141,6 +1148,143 @@ def render_login_page():
             <p style="color: #6c757d; font-size: 14px; margin-top: 8px;">Enterprise Edition</p>
         </div>
         """, unsafe_allow_html=True)
+        
+        # ========== AZURE AD / MICROSOFT SIGN-IN BUTTON ==========
+        # Check if Azure AD is configured and add Microsoft sign-in option
+        azure_ad_configured = False
+        azure_auth_url = ""
+        try:
+            azure_config = st.secrets.get("azure_ad", {})
+            if azure_config.get("tenant_id") and azure_config.get("client_id") and azure_config.get("client_secret"):
+                azure_ad_configured = True
+                # Try to import and use Azure AD auth
+                try:
+                    import msal
+                    import hashlib
+                    import os as os_module
+                    
+                    # Generate state token
+                    state = hashlib.sha256(os_module.urandom(32)).hexdigest()
+                    st.session_state['oauth_state'] = state
+                    
+                    # Build auth URL
+                    authority = f"https://login.microsoftonline.com/{azure_config['tenant_id']}"
+                    msal_app = msal.ConfidentialClientApplication(
+                        client_id=azure_config['client_id'],
+                        client_credential=azure_config['client_secret'],
+                        authority=authority
+                    )
+                    scopes = ["User.Read", "User.ReadBasic.All"]
+                    redirect_uri = azure_config.get('redirect_uri', 'http://localhost:8501')
+                    azure_auth_url = msal_app.get_authorization_request_url(
+                        scopes=scopes,
+                        state=state,
+                        redirect_uri=redirect_uri,
+                        prompt="select_account"
+                    )
+                except ImportError:
+                    azure_ad_configured = False
+                except Exception as e:
+                    print(f"Azure AD init error: {e}")
+                    azure_ad_configured = False
+        except Exception:
+            pass
+        
+        # Handle Azure AD callback
+        query_params = st.query_params
+        if 'code' in query_params and azure_ad_configured:
+            try:
+                import msal
+                import requests
+                
+                azure_config = st.secrets.get("azure_ad", {})
+                code = query_params.get('code')
+                state = query_params.get('state')
+                
+                # Validate state
+                stored_state = st.session_state.get('oauth_state')
+                if state and stored_state and state == stored_state:
+                    authority = f"https://login.microsoftonline.com/{azure_config['tenant_id']}"
+                    msal_app = msal.ConfidentialClientApplication(
+                        client_id=azure_config['client_id'],
+                        client_credential=azure_config['client_secret'],
+                        authority=authority
+                    )
+                    
+                    result = msal_app.acquire_token_by_authorization_code(
+                        code=code,
+                        scopes=["User.Read"],
+                        redirect_uri=azure_config.get('redirect_uri', 'http://localhost:8501')
+                    )
+                    
+                    if 'access_token' in result:
+                        # Get user info from Microsoft Graph
+                        headers = {'Authorization': f'Bearer {result["access_token"]}'}
+                        user_response = requests.get(
+                            "https://graph.microsoft.com/v1.0/me",
+                            headers=headers,
+                            timeout=10
+                        )
+                        
+                        if user_response.status_code == 200:
+                            user_data = user_response.json()
+                            # Create user session
+                            azure_user = User(
+                                uid=user_data.get('id', f"azure-{uuid.uuid4().hex[:8]}"),
+                                email=user_data.get('mail') or user_data.get('userPrincipalName', ''),
+                                display_name=user_data.get('displayName', 'Azure User'),
+                                role=UserRole.USER,
+                                organization_id="Azure AD",
+                                last_login=datetime.now(),
+                                active=True,
+                            )
+                            SessionManager.login(azure_user)
+                            st.query_params.clear()
+                            st.success(f"✅ Welcome, {azure_user.display_name}!")
+                            st.rerun()
+            except Exception as e:
+                st.error(f"Azure AD login error: {str(e)}")
+                st.query_params.clear()
+        
+        # Show Microsoft Sign-In Button
+        if azure_ad_configured and azure_auth_url:
+            st.markdown("""
+            <style>
+            .ms-signin-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #2F2F2F;
+                color: white !important;
+                padding: 12px 24px;
+                border-radius: 4px;
+                text-decoration: none !important;
+                font-weight: 500;
+                font-size: 15px;
+                width: 100%;
+                margin: 10px 0 20px 0;
+                transition: background 0.2s;
+            }
+            .ms-signin-btn:hover {
+                background: #1a1a1a;
+                color: white !important;
+            }
+            .ms-signin-btn img {
+                width: 21px;
+                height: 21px;
+                margin-right: 12px;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <a href="{azure_auth_url}" class="ms-signin-btn">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" alt="Microsoft">
+                Sign in with Microsoft
+            </a>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('<div style="text-align: center; color: #999; margin: 15px 0; font-size: 13px;">— or sign in with email —</div>', unsafe_allow_html=True)
         
         # Login Form Card - Clean white design
         st.markdown("""

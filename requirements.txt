@@ -50,12 +50,18 @@ reportlab>=4.0.0                  # PDF generation
 Pillow>=10.0.0                    # Image processing
 
 # ============================================================================
-# FIREBASE AUTHENTICATION (Optional)
+# FIREBASE AUTHENTICATION (Optional - Legacy)
 # ============================================================================
 firebase-admin>=6.2.0             # Firebase Admin SDK
 pyrebase4>=4.7.0                  # Firebase client library
 google-cloud-firestore>=2.11.0    # Firestore database
 python-dotenv>=1.0.0              # Environment variable management
+
+# ============================================================================
+# AZURE AD / ENTRA ID AUTHENTICATION (Recommended - Enterprise SSO)
+# ============================================================================
+msal>=1.24.0                      # Microsoft Authentication Library
+PyJWT>=2.8.0                      # JWT token handling
 
 # ============================================================================
 # DEPENDENCY MAPPING & GRAPH VISUALIZATION (Optional)

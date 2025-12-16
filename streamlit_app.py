@@ -29,9 +29,12 @@ from demo_mode_manager import (
     render_demo_account_info
 )
 
-# Import SSO & Admin Manager
+# Import SSO & Admin Manager - Azure AD / Entra ID (Primary) or Firebase (Fallback)
+SSO_AVAILABLE = False
+
+# Try Azure AD / Entra ID first (Enterprise SSO)
 try:
-    from sso_admin_manager import (
+    from auth_azure_entra import (
         SessionManager,
         get_auth_manager,
         render_login_page,
@@ -41,9 +44,29 @@ try:
         UserRole,
     )
     SSO_AVAILABLE = True
+    SSO_BACKEND = "azure_ad"
+    print("✓ Azure AD / Entra ID authentication loaded")
 except Exception as e:
-    SSO_AVAILABLE = False
-    print(f"SSO module not available: {e}")
+    print(f"Azure AD not available: {e}")
+    
+    # Fallback to Firebase SSO
+    try:
+        from sso_admin_manager import (
+            SessionManager,
+            get_auth_manager,
+            render_login_page,
+            render_user_menu,
+            render_admin_panel,
+            check_tab_access,
+            UserRole,
+        )
+        SSO_AVAILABLE = True
+        SSO_BACKEND = "firebase"
+        print("✓ Firebase authentication loaded (fallback)")
+    except Exception as e2:
+        SSO_AVAILABLE = False
+        SSO_BACKEND = None
+        print(f"SSO module not available: {e2}")
 
 
 # Page configuration
