@@ -9,7 +9,7 @@ RECENT UPDATES:
 - Professional PDF report generation
 - Complete WAF framework mapping (all 6 pillars)
 - Demo/Live mode toggle for demonstrations
-- SSO Authentication with Firebase
+- Azure AD SSO Authentication with Firebase Realtime Database
 - Role-Based Access Control (RBAC)
 - Admin Panel for user management
 """
@@ -29,44 +29,17 @@ from demo_mode_manager import (
     render_demo_account_info
 )
 
-# Import SSO & Admin Manager - Azure AD / Entra ID (Primary) or Firebase (Fallback)
-SSO_AVAILABLE = False
-
-# Try Azure AD / Entra ID first (Enterprise SSO)
+# ==================================================================================
+# AUTHENTICATION - Azure AD SSO + Firebase (Multicloud Approach)
+# ==================================================================================
 try:
-    from auth_azure_entra import (
-        SessionManager,
-        get_auth_manager,
-        render_login_page,
-        render_user_menu,
-        render_admin_panel,
-        check_tab_access,
-        UserRole,
-    )
+    from auth_azure_sso import render_login, RoleManager
+    from auth_database_firebase import get_database_manager
     SSO_AVAILABLE = True
-    SSO_BACKEND = "azure_ad"
-    print("✓ Azure AD / Entra ID authentication loaded")
-except Exception as e:
-    print(f"Azure AD not available: {e}")
-    
-    # Fallback to Firebase SSO
-    try:
-        from sso_admin_manager import (
-            SessionManager,
-            get_auth_manager,
-            render_login_page,
-            render_user_menu,
-            render_admin_panel,
-            check_tab_access,
-            UserRole,
-        )
-        SSO_AVAILABLE = True
-        SSO_BACKEND = "firebase"
-        print("✓ Firebase authentication loaded (fallback)")
-    except Exception as e2:
-        SSO_AVAILABLE = False
-        SSO_BACKEND = None
-        print(f"SSO module not available: {e2}")
+except ImportError as e:
+    SSO_AVAILABLE = False
+    print(f"Authentication modules not found: {e}")
+    print("Running without authentication")
 
 
 # Page configuration
@@ -76,6 +49,33 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# ==================================================================================
+# AUTHENTICATION CHECK - MUST BE BEFORE ANY OTHER CONTENT
+# ==================================================================================
+if SSO_AVAILABLE:
+    # Check if user is authenticated
+    if not st.session_state.get('authenticated', False):
+        # Show login page and stop
+        render_login()
+        st.stop()
+    
+    # User is authenticated - get user info
+    current_user = st.session_state.get('user_info')
+    
+    # If authenticated but no user_info, something went wrong - show login again
+    if not current_user:
+        st.warning("⚠️ Session incomplete. Please login again.")
+        st.session_state.authenticated = False
+        render_login()
+        st.stop()
+    
+    # Get database manager
+    db_manager = get_database_manager()
+else:
+    # No authentication - set defaults
+    current_user = None
+    db_manager = None
 
 # Initialize session state
 if 'initialized' not in st.session_state:
@@ -335,41 +335,59 @@ def render_sidebar():
     
     with st.sidebar:
         # ====== USER INFO (Only shown when authenticated) ======
-        if SSO_AVAILABLE and SessionManager.is_authenticated():
-            user = SessionManager.get_current_user()
-            if user:
+        if SSO_AVAILABLE and st.session_state.get('authenticated', False):
+            user_info = st.session_state.get('user_info')
+            if user_info:
                 st.markdown("### 👤 Logged In As")
+                
+                # Get user role from user_info dict
+                user_role = user_info.get('role', 'viewer')
+                user_name = user_info.get('name', 'User')
+                user_email = user_info.get('email', '')
                 
                 # Professional role colors - Infosys blue theme
                 role_colors = {
-                    UserRole.SUPER_ADMIN: "#007CC3",  # Infosys Blue
-                    UserRole.ADMIN: "#0066A1",        # Dark Blue
-                    UserRole.MANAGER: "#17a2b8",      # Teal
-                    UserRole.USER: "#28a745",         # Green
-                    UserRole.VIEWER: "#6c757d",       # Gray
-                    UserRole.GUEST: "#adb5bd",        # Light Gray
+                    'admin': "#007CC3",       # Infosys Blue
+                    'architect': "#0066A1",   # Dark Blue
+                    'developer': "#17a2b8",   # Teal
+                    'finops': "#28a745",      # Green
+                    'security': "#dc3545",    # Red
+                    'viewer': "#6c757d",      # Gray
                 }
                 
-                role_color = role_colors.get(user.role, "#6c757d")
+                role_icons = {
+                    'admin': "🔴",
+                    'architect': "🏗️",
+                    'developer': "💻",
+                    'finops': "💰",
+                    'security': "🛡️",
+                    'viewer': "👁️",
+                }
+                
+                role_color = role_colors.get(user_role, "#6c757d")
+                role_icon = role_icons.get(user_role, "⚪")
                 
                 st.markdown(f"""
                 <div style="padding: 12px; background: linear-gradient(135deg, {role_color}15, {role_color}25); 
                             border-radius: 8px; border: 1px solid {role_color}; margin-bottom: 15px;">
-                    <div style="font-weight: 600; color: #333; font-size: 15px;">{user.display_name}</div>
-                    <div style="font-size: 12px; color: {role_color}; margin: 4px 0; font-weight: 500;">{user.role.name.replace('_', ' ').title()}</div>
-                    <div style="font-size: 11px; color: #666;">{user.email}</div>
+                    <div style="font-weight: 600; color: #333; font-size: 15px;">{user_name}</div>
+                    <div style="font-size: 12px; color: {role_color}; margin: 4px 0; font-weight: 500;">{role_icon} {user_role.title()}</div>
+                    <div style="font-size: 11px; color: #666;">{user_email}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+                    if user_role == 'admin':
                         if st.button("⚙️ Admin", use_container_width=True, key="sidebar_admin_btn"):
                             st.session_state.show_admin_panel = True
                             st.rerun()
                 with col_b:
                     if st.button("Logout", use_container_width=True, key="sidebar_logout_btn"):
-                        SessionManager.logout()
+                        # Clear session state
+                        st.session_state.authenticated = False
+                        st.session_state.user_info = None
+                        st.session_state.user_id = None
                         st.rerun()
                 
                 st.markdown("---")
@@ -2936,9 +2954,9 @@ def render_main_content():
     
     # Add Admin Panel if user is admin
     show_admin_tab = False
-    if SSO_AVAILABLE and SessionManager.is_authenticated():
-        user = SessionManager.get_current_user()
-        if user and user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+    if SSO_AVAILABLE and st.session_state.get('authenticated', False):
+        user_info = st.session_state.get('user_info')
+        if user_info and user_info.get('role') == 'admin':
             base_tabs.append("⚙️ Admin Panel")
             show_admin_tab = True
     
@@ -3038,7 +3056,40 @@ def render_main_content():
     if show_admin_tab and len(tabs) > 8:
         with tabs[8]:
             if SSO_AVAILABLE:
-                render_admin_panel()
+                try:
+                    from modules_admin_panel import render_admin_panel
+                    render_admin_panel()
+                except ImportError:
+                    # Fallback: simple admin panel
+                    st.markdown("## ⚙️ Admin Panel")
+                    st.info("Admin panel allows you to manage users and roles.")
+                    
+                    try:
+                        db = get_database_manager()
+                        if db:
+                            users = db.get_all_users()
+                            if users:
+                                st.markdown("### 👥 User Management")
+                                for user in users:
+                                    with st.expander(f"👤 {user.get('name', 'Unknown')} - {user.get('role', 'viewer')}"):
+                                        st.write(f"**Email:** {user.get('email')}")
+                                        st.write(f"**Role:** {user.get('role')}")
+                                        st.write(f"**Last Login:** {user.get('last_login', 'Never')}")
+                                        
+                                        new_role = st.selectbox(
+                                            "Change Role",
+                                            ['admin', 'architect', 'developer', 'finops', 'security', 'viewer'],
+                                            index=['admin', 'architect', 'developer', 'finops', 'security', 'viewer'].index(user.get('role', 'viewer')),
+                                            key=f"role_{user.get('id')}"
+                                        )
+                                        if st.button(f"Update Role", key=f"update_{user.get('id')}"):
+                                            if db.update_user_role(user.get('id'), new_role):
+                                                st.success(f"✅ Updated {user.get('name')} to {new_role}")
+                                                st.rerun()
+                            else:
+                                st.info("No users found in database")
+                    except Exception as e:
+                        st.error(f"Error loading users: {e}")
             else:
                 st.error("Admin Panel requires SSO module")
 
@@ -3050,28 +3101,24 @@ def main():
     """Main application - ALWAYS requires authentication first"""
     
     # =========================================================================
-    # STEP 1: AUTHENTICATION CHECK (MANDATORY)
+    # STEP 1: AUTHENTICATION IS ALREADY CHECKED AT TOP OF FILE
+    # (Using multicloud approach - render_login() and st.stop() if not authenticated)
     # =========================================================================
     
     if SSO_AVAILABLE:
-        # Check if user is authenticated
-        if not SessionManager.is_authenticated():
-            # Show ONLY the login page - nothing else
-            render_login_page()
-            return  # Stop here - don't render anything else
-        
-        # User is authenticated - check for admin panel
+        # Check for admin panel display
         if st.session_state.get('show_admin_panel', False):
-            render_admin_panel()
+            try:
+                from modules_admin_panel import render_admin_panel
+                render_admin_panel()
+            except ImportError:
+                st.markdown("## ⚙️ Admin Panel")
+                st.info("Full admin panel module not available")
+            
             if st.button("← Back to Application", type="primary"):
                 st.session_state.show_admin_panel = False
                 st.rerun()
             return
-    else:
-        # SSO module not available - show error and login
-        st.error("🔐 Authentication module not loaded properly")
-        st.info("Please ensure the SSO module is properly installed.")
-        return
     
     # =========================================================================
     # STEP 2: RENDER MAIN APPLICATION (Only for authenticated users)
