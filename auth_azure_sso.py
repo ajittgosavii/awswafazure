@@ -371,89 +371,108 @@ def render_login():
             f"prompt=select_account"
         )
         
-        # Clean professional login page with Infosys branding
+        # Professional login page with Infosys branding
         st.markdown(f"""
         <style>
         .login-container {{
-            max-width: 500px;
-            margin: 100px auto;
-            padding: 50px;
+            max-width: 460px;
+            margin: 60px auto;
+            padding: 50px 45px;
             background: white;
-            border-radius: 16px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-            text-align: center;
-        }}
-        .logo-wrapper {{
-            display: inline-block;
-            padding: 20px;
-            border: 2px solid #007CC3;
             border-radius: 12px;
-            margin-bottom: 30px;
-            background: linear-gradient(135deg, #007CC315, #007CC325);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            text-align: center;
+            border: 1px solid #E5E9EC;
         }}
-        .logo {{
-            font-size: 72px;
-            line-height: 1;
-        }}
-        .title {{
-            font-size: 28px;
+        .infosys-logo {{
+            font-size: 38px;
             font-weight: 700;
             color: #007CC3;
-            margin-bottom: 8px;
+            margin-bottom: 35px;
             letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }}
-        .subtitle {{
-            font-size: 16px;
+        .logo-bar {{
+            width: 4px;
+            height: 32px;
+            background: #007CC3;
+            border-radius: 2px;
+        }}
+        .divider {{
+            width: 50px;
+            height: 2px;
+            background: #007CC3;
+            margin: 0 auto 25px auto;
+            border-radius: 1px;
+        }}
+        .app-title {{
+            font-size: 22px;
+            font-weight: 600;
+            color: #1A1A1A;
+            margin-bottom: 6px;
+            line-height: 1.3;
+        }}
+        .app-subtitle {{
+            font-size: 14px;
             color: #666;
-            margin-bottom: 50px;
+            margin-bottom: 40px;
             font-weight: 400;
         }}
         .signin-link {{
-            display: inline-block;
-            padding: 14px 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 12px 32px;
             color: white;
             text-decoration: none;
-            font-size: 16px;
-            font-weight: 600;
+            font-size: 14px;
+            font-weight: 500;
             border: none;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-            background: linear-gradient(135deg, #007CC3, #0066A1);
-            box-shadow: 0 4px 12px rgba(0,124,195,0.3);
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            background: #0078D4;
+            min-width: 240px;
         }}
         .signin-link:hover {{
-            background: linear-gradient(135deg, #0066A1, #005080);
+            background: #106EBE;
             color: white;
             text-decoration: none;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0,124,195,0.4);
+            box-shadow: 0 2px 8px rgba(0,120,212,0.25);
         }}
-        .infosys-badge {{
+        .ms-icon {{
+            width: 18px;
+            height: 18px;
+        }}
+        .footer-text {{
             margin-top: 40px;
-            padding: 10px 20px;
-            background: #F7F9FA;
-            border-radius: 8px;
-            display: inline-block;
-        }}
-        .infosys-text {{
-            color: #007CC3;
-            font-weight: 600;
-            font-size: 14px;
+            font-size: 11px;
+            color: #999;
+            letter-spacing: 0.5px;
         }}
         </style>
         
         <div class="login-container">
-            <div class="logo-wrapper">
-                <div class="logo">🏗️</div>
+            <div class="infosys-logo">
+                <div class="logo-bar"></div>
+                Infosys
             </div>
-            <div class="title">AWS Well-Architected Framework Advisor</div>
-            <div class="subtitle">AI-Powered Architecture Assessment & Scanning</div>
+            <div class="divider"></div>
+            <div class="app-title">AWS Well-Architected Framework Advisor</div>
+            <div class="app-subtitle">AI-Powered Architecture Assessment & Scanning</div>
             <a href="{auth_url}" class="signin-link">
-                🔷 Sign in with Microsoft
+                <svg class="ms-icon" viewBox="0 0 21 21" fill="none">
+                    <rect width="10" height="10" fill="#F25022"/>
+                    <rect x="11" width="10" height="10" fill="#7FBA00"/>
+                    <rect y="11" width="10" height="10" fill="#00A4EF"/>
+                    <rect x="11" y="11" width="10" height="10" fill="#FFB900"/>
+                </svg>
+                Sign in with Microsoft
             </a>
-            <div class="infosys-badge">
-                <span class="infosys-text">Powered by Infosys</span>
-            </div>
+            <div class="footer-text">ENTERPRISE CLOUD SOLUTIONS</div>
         </div>
         """, unsafe_allow_html=True)
         
