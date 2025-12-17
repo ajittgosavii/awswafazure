@@ -338,6 +338,17 @@ def render_sidebar():
         if SSO_AVAILABLE and st.session_state.get('authenticated', False):
             user_info = st.session_state.get('user_info')
             if user_info:
+                # ALWAYS refresh role from Firebase
+                try:
+                    db = get_database_manager()
+                    if db:
+                        fresh_user = db.get_user(user_info.get('id'))
+                        if fresh_user and isinstance(fresh_user, dict):
+                            user_info['role'] = fresh_user.get('role', 'viewer')
+                            st.session_state.user_info = user_info
+                except Exception as e:
+                    print(f"Error refreshing role: {e}")
+                
                 st.markdown("### 👤 Logged In As")
                 
                 # Get user role from user_info dict
