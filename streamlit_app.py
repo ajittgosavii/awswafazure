@@ -2945,6 +2945,177 @@ def display_multi_account_results(results):
                     st.markdown("- Underutilized instances\n- Unattached EBS volumes")
 
 # ============================================================================
+# LIGHTWEIGHT ADMIN PANEL - Firebase Realtime Database
+# ============================================================================
+
+def render_admin_panel_firebase():
+    """Lightweight Admin Panel using Firebase Realtime Database directly"""
+    
+    st.markdown("## ⚙️ Admin Panel")
+    st.markdown("Manage users and roles")
+    st.markdown("---")
+    
+    # Get database manager
+    try:
+        db = get_database_manager()
+        if not db or not db.db_ref:
+            st.error("❌ Firebase connection not available")
+            st.info("Please check your Firebase configuration in secrets.toml")
+            return
+    except Exception as e:
+        st.error(f"❌ Database error: {e}")
+        return
+    
+    # Create tabs for different admin functions
+    admin_tabs = st.tabs(["👥 Users", "📊 Stats", "🔧 Settings"])
+    
+    # Role colors and icons (shared across tabs)
+    role_config = {
+        'admin': {'color': '#DC3545', 'icon': '🔴'},
+        'architect': {'color': '#007CC3', 'icon': '🏗️'},
+        'developer': {'color': '#28A745', 'icon': '💻'},
+        'finops': {'color': '#FFC107', 'icon': '💰'},
+        'security': {'color': '#6F42C1', 'icon': '🛡️'},
+        'viewer': {'color': '#6C757D', 'icon': '👁️'},
+    }
+    
+    # Tab 1: User Management
+    with admin_tabs[0]:
+        st.markdown("### 👥 User Management")
+        
+        # Refresh button
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if st.button("🔄 Refresh", use_container_width=True):
+                st.rerun()
+        
+        # Get all users
+        try:
+            users = db.get_all_users(active_only=False)
+            
+            if not users:
+                st.info("No users found in database")
+                return
+            
+            st.success(f"✅ Found {len(users)} user(s)")
+            
+            # Display users in a clean format
+            for user in users:
+                user_id = user.get('id', 'unknown')
+                user_name = user.get('name') or user.get('email', 'Unknown User')
+                user_email = user.get('email', 'No email')
+                current_role = user.get('role', 'viewer')
+                last_login = user.get('last_login', 'Never')
+                
+                role_info = role_config.get(current_role, {'color': '#6C757D', 'icon': '⚪'})
+                
+                with st.container():
+                    st.markdown(f"""
+                    <div style="padding: 15px; background: #F8F9FA; border-radius: 8px; 
+                                margin-bottom: 10px; border-left: 4px solid {role_info['color']};">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="font-size: 16px;">{user_name}</strong>
+                                <span style="margin-left: 10px; padding: 2px 8px; background: {role_info['color']}20; 
+                                            color: {role_info['color']}; border-radius: 4px; font-size: 12px;">
+                                    {role_info['icon']} {current_role.upper()}
+                                </span>
+                            </div>
+                        </div>
+                        <div style="color: #666; font-size: 13px; margin-top: 5px;">
+                            📧 {user_email} &nbsp;|&nbsp; 🕐 Last login: {last_login[:16] if len(str(last_login)) > 16 else last_login}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Role change controls
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        new_role = st.selectbox(
+                            "Role",
+                            ['admin', 'architect', 'developer', 'finops', 'security', 'viewer'],
+                            index=['admin', 'architect', 'developer', 'finops', 'security', 'viewer'].index(current_role) if current_role in ['admin', 'architect', 'developer', 'finops', 'security', 'viewer'] else 5,
+                            key=f"role_select_{user_id}",
+                            label_visibility="collapsed"
+                        )
+                    with col2:
+                        if st.button("💾 Update Role", key=f"update_btn_{user_id}", use_container_width=True):
+                            if db.update_user_role(user_id, new_role):
+                                st.success(f"✅ Updated to {new_role}")
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to update role")
+                    
+                    st.markdown("---")
+                    
+        except Exception as e:
+            st.error(f"❌ Error loading users: {e}")
+    
+    # Tab 2: Statistics
+    with admin_tabs[1]:
+        st.markdown("### 📊 User Statistics")
+        
+        try:
+            stats = db.get_user_stats()
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Users", stats.get('total_users', 0))
+            with col2:
+                st.metric("Active Users", stats.get('active_users', 0))
+            with col3:
+                st.metric("Inactive Users", stats.get('inactive_users', 0))
+            
+            st.markdown("#### Users by Role")
+            roles_by_count = stats.get('users_by_role', {})
+            if roles_by_count:
+                for role, count in roles_by_count.items():
+                    role_info = role_config.get(role, {'color': '#6C757D', 'icon': '⚪'})
+                    st.markdown(f"""
+                    <div style="display: flex; align-items: center; margin: 5px 0;">
+                        <span style="width: 100px;">{role_info['icon']} {role.title()}</span>
+                        <div style="flex: 1; background: #E9ECEF; border-radius: 4px; height: 24px; margin: 0 10px;">
+                            <div style="width: {min(count * 20, 100)}%; background: {role_info['color']}; 
+                                        height: 100%; border-radius: 4px;"></div>
+                        </div>
+                        <span style="font-weight: 600;">{count}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No role statistics available")
+                
+        except Exception as e:
+            st.error(f"Error loading stats: {e}")
+    
+    # Tab 3: Settings
+    with admin_tabs[2]:
+        st.markdown("### 🔧 Settings")
+        
+        st.markdown("#### 🔑 Role Definitions")
+        
+        roles_info = [
+            ("🔴 Admin", "Full system access - can manage all users and settings"),
+            ("🏗️ Architect", "Design and provision infrastructure, manage policies"),
+            ("💻 Developer", "Deploy and manage applications"),
+            ("💰 FinOps", "Financial operations and cost management"),
+            ("🛡️ Security", "Security and compliance management"),
+            ("👁️ Viewer", "Read-only access to dashboards and reports"),
+        ]
+        
+        for role_name, role_desc in roles_info:
+            st.markdown(f"**{role_name}**: {role_desc}")
+        
+        st.markdown("---")
+        st.markdown("#### ℹ️ Database Info")
+        
+        try:
+            if db and db.db_ref:
+                st.success("✅ Firebase Realtime Database: Connected")
+                st.caption("User data is stored in Firebase Realtime Database")
+        except:
+            st.error("❌ Database connection issue")
+
+# ============================================================================
 # MAIN TABS
 # ============================================================================
 
@@ -3063,46 +3234,10 @@ def render_main_content():
             st.warning("AI Assistant module not available")
             st.info("AI-powered assistance requires the AI Assistant module and Anthropic API key.")
     
-    # Tab 9: Admin Panel (only for admins)
+    # Tab 9: Admin Panel (only for admins) - Lightweight Firebase Version
     if show_admin_tab and len(tabs) > 8:
         with tabs[8]:
-            if SSO_AVAILABLE:
-                try:
-                    from modules_admin_panel import render_admin_panel
-                    render_admin_panel()
-                except ImportError:
-                    # Fallback: simple admin panel
-                    st.markdown("## ⚙️ Admin Panel")
-                    st.info("Admin panel allows you to manage users and roles.")
-                    
-                    try:
-                        db = get_database_manager()
-                        if db:
-                            users = db.get_all_users()
-                            if users:
-                                st.markdown("### 👥 User Management")
-                                for user in users:
-                                    with st.expander(f"👤 {user.get('name', 'Unknown')} - {user.get('role', 'viewer')}"):
-                                        st.write(f"**Email:** {user.get('email')}")
-                                        st.write(f"**Role:** {user.get('role')}")
-                                        st.write(f"**Last Login:** {user.get('last_login', 'Never')}")
-                                        
-                                        new_role = st.selectbox(
-                                            "Change Role",
-                                            ['admin', 'architect', 'developer', 'finops', 'security', 'viewer'],
-                                            index=['admin', 'architect', 'developer', 'finops', 'security', 'viewer'].index(user.get('role', 'viewer')),
-                                            key=f"role_{user.get('id')}"
-                                        )
-                                        if st.button(f"Update Role", key=f"update_{user.get('id')}"):
-                                            if db.update_user_role(user.get('id'), new_role):
-                                                st.success(f"✅ Updated {user.get('name')} to {new_role}")
-                                                st.rerun()
-                            else:
-                                st.info("No users found in database")
-                    except Exception as e:
-                        st.error(f"Error loading users: {e}")
-            else:
-                st.error("Admin Panel requires SSO module")
+            render_admin_panel_firebase()
 
 # ============================================================================
 # MAIN APPLICATION
@@ -3117,15 +3252,9 @@ def main():
     # =========================================================================
     
     if SSO_AVAILABLE:
-        # Check for admin panel display
+        # Check for admin panel display (sidebar button)
         if st.session_state.get('show_admin_panel', False):
-            try:
-                from modules_admin_panel import render_admin_panel
-                render_admin_panel()
-            except ImportError:
-                st.markdown("## ⚙️ Admin Panel")
-                st.info("Full admin panel module not available")
-            
+            render_admin_panel_firebase()
             if st.button("← Back to Application", type="primary"):
                 st.session_state.show_admin_panel = False
                 st.rerun()
