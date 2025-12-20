@@ -606,23 +606,23 @@ def get_cost_data(account_mgr=None) -> Dict:
         return generate_demo_cost_data()
     else:
         # Live mode - fetch real AWS data
-        if not account_mgr:
-            account_mgr = get_account_manager()
-        
-        if not account_mgr or not account_mgr.get_current_session():
-            # No AWS connection - return empty data
-            return {
-                'total_cost': 0,
-                'services': {},
-                'daily_costs': [],
-                'by_account': {},
-                'error': 'No AWS session available'
-            }
-        
         try:
+            from aws_connector import get_aws_session
             from aws_cost_explorer import CostExplorerService
             
-            session = account_mgr.get_current_session()
+            # Get AWS session from current connection
+            session = get_aws_session()
+            
+            if not session:
+                # No AWS connection - return empty data
+                return {
+                    'total_cost': 0,
+                    'services': {},
+                    'daily_costs': [],
+                    'by_account': {},
+                    'error': 'No AWS session available'
+                }
+            
             ce_service = CostExplorerService(session)
             
             # Get cost by service (last 30 days)
@@ -706,11 +706,18 @@ class FinOpsEnterpriseModule:
             'finops_recommendations'
         ])
         
+        # Only require AWS credentials in Live mode
+        if not demo_mgr.is_demo_mode:
+            # Check if we have AWS credentials configured
+            from aws_connector import get_aws_session
+            test_session = get_aws_session()
+            if not test_session:
+                st.warning("⚠️ No AWS credentials configured for Live Mode")
+                st.info("👉 Configure AWS credentials in the 'AWS Connector' tab or switch to Demo Mode")
+                return
+        
+        # Get account manager (used for some features)
         account_mgr = get_account_manager()
-        if not account_mgr:
-            st.warning("⚠️ Configure AWS credentials first")
-            st.info("👉 Go to 'Account Management' to add your AWS accounts")
-            return
         
         # Check AI availability
         ai_available = get_anthropic_client() is not None
@@ -775,7 +782,7 @@ class FinOpsEnterpriseModule:
         
         st.markdown("### 🎯 Cost Overview")
         
-        cost_data = get_cost_data(account_mgr)
+        cost_data = get_cost_data()  # No longer needs account_mgr
         
         # Top metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -1271,7 +1278,7 @@ class FinOpsEnterpriseModule:
         
         st.markdown("### 📊 Multi-Account Cost Analysis")
         
-        cost_data = get_cost_data(account_mgr)
+        cost_data = get_cost_data()  # No longer needs account_mgr
         
         account_df = pd.DataFrame([
             {
