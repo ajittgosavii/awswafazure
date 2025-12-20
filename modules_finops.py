@@ -703,23 +703,9 @@ def get_anomalies() -> List[Dict]:
         # Demo mode - return simulated anomalies
         return generate_cost_anomalies()
     else:
-        # Live mode - fetch real AWS Cost Anomaly Detection data
-        st.info("💡 **Live Mode:** Cost Anomaly Detection")
-        st.markdown("""
-        In Live Mode, this section would integrate with **AWS Cost Anomaly Detection** service to show real anomalies.
-        
-        **To enable real anomaly detection:**
-        1. Go to AWS Console → Billing → Cost Anomaly Detection
-        2. Create an anomaly monitor
-        3. Configure alert subscriptions
-        4. Integrate via AWS SDK (boto3)
-        
-        **For now, showing simulated data for demonstration purposes.**
-        """)
-        
-        # For now, return demo data in Live mode too
-        # TODO: Integrate with AWS Cost Anomaly Detection API
-        return generate_cost_anomalies()
+        # Live mode - return empty list (no real integration yet)
+        # This will trigger the UI to show setup instructions instead of dummy data
+        return []
 
 def get_carbon_data() -> Dict:
     """
@@ -733,22 +719,9 @@ def get_carbon_data() -> Dict:
         # Demo mode - return simulated carbon data
         return generate_carbon_footprint_data()
     else:
-        # Live mode - calculate real carbon emissions
-        st.info("💡 **Live Mode:** Sustainability & Carbon Tracking")
-        st.markdown("""
-        In Live Mode, this section calculates real carbon emissions based on your AWS usage.
-        
-        **How it works:**
-        1. Fetches your AWS resource usage (EC2, S3, etc.)
-        2. Gets region-specific carbon intensity data
-        3. Calculates CO2 emissions using AWS Customer Carbon Footprint Tool methodology
-        
-        **For now, showing simulated data for demonstration purposes.**
-        """)
-        
-        # For now, return demo data in Live mode too
-        # TODO: Calculate real carbon emissions from AWS usage
-        return generate_carbon_footprint_data()
+        # Live mode - return empty dict (no real integration yet)
+        # This will trigger the UI to show setup instructions
+        return {}
 
 # ============================================================================
 # MAIN FINOPS MODULE
@@ -974,9 +947,81 @@ class FinOpsEnterpriseModule:
         """NEW: Cost Anomaly Detection and Alerting"""
         
         st.markdown("### 🚨 Cost Anomaly Detection")
-        st.info("📊 ML-powered detection of unusual spending patterns and cost spikes")
         
         anomalies = get_anomalies()  # Mode-aware function
+        
+        # Check if we have anomalies data
+        if not anomalies or len(anomalies) == 0:
+            demo_mgr = DemoModeManager()
+            
+            if demo_mgr.is_demo_mode:
+                # Demo mode with no data - shouldn't happen
+                st.info("No anomalies detected in demo mode")
+            else:
+                # Live mode - AWS Cost Anomaly Detection not available
+                st.warning("### ⚠️ AWS Cost Anomaly Detection Not Configured")
+                
+                st.markdown("""
+                **AWS Cost Anomaly Detection** is not yet integrated with this platform.
+                
+                ### 🎯 What is Cost Anomaly Detection?
+                
+                AWS Cost Anomaly Detection uses machine learning to monitor your AWS spending patterns and 
+                automatically detect unusual spikes or patterns in your costs.
+                
+                ### 🚀 How to Enable Real Anomaly Detection:
+                
+                **Option 1: Enable in AWS Console**
+                1. Go to [AWS Cost Anomaly Detection Console](https://console.aws.amazon.com/cost-management/home#/anomaly-detection)
+                2. Create an **Anomaly Monitor** for your accounts
+                3. Set up **Alert Subscriptions** for email/SNS notifications
+                4. Configure detection preferences and thresholds
+                
+                **Option 2: Future Platform Integration** (Coming Soon)
+                - We're working on direct integration with AWS Cost Anomaly Detection API
+                - This will display real-time anomalies directly in this dashboard
+                - You'll be able to investigate and resolve anomalies from here
+                
+                ### 💡 What You'll Get:
+                - ✅ Automatic detection of cost spikes
+                - ✅ Root cause analysis
+                - ✅ Email/SMS alerts for critical anomalies
+                - ✅ Historical anomaly tracking
+                - ✅ Cost impact assessment
+                
+                ### 🔄 For Now:
+                Switch to **Demo Mode** (sidebar) to see simulated anomaly detection in action.
+                """)
+                
+                st.markdown("---")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.info("""
+                    **Quick Setup Guide:**
+                    
+                    1. AWS Console → Billing & Cost Management
+                    2. Cost Anomaly Detection → Create monitor
+                    3. Choose services to monitor
+                    4. Set alert threshold (e.g., $100)
+                    5. Add email for notifications
+                    """)
+                
+                with col2:
+                    st.success("""
+                    **Benefits:**
+                    
+                    📊 ML-powered cost spike detection
+                    🚨 Real-time alerts
+                    💰 Prevent cost overruns
+                    📈 Historical trend analysis
+                    🎯 Root cause identification
+                    """)
+            
+            return
+        
+        # We have anomalies data - render normally
+        st.info("📊 ML-powered detection of unusual spending patterns and cost spikes")
         
         # Summary metrics
         total_waste = sum(
@@ -1181,9 +1226,85 @@ class FinOpsEnterpriseModule:
         """Sustainability & CO2 emissions tracking"""
         
         st.markdown("### 🌱 Sustainability & Carbon Emissions")
-        st.info("📊 Track and optimize your cloud carbon footprint for a sustainable future")
         
         carbon_data = get_carbon_data()  # Mode-aware function
+        
+        # Check if we have carbon data
+        if not carbon_data or len(carbon_data) == 0:
+            demo_mgr = DemoModeManager()
+            
+            if not demo_mgr.is_demo_mode:
+                # Live mode - Carbon tracking not available
+                st.warning("### ⚠️ Sustainability Tracking Not Configured")
+                
+                st.markdown("""
+                **Carbon emissions tracking** is not yet integrated with this platform.
+                
+                ### 🌍 What is AWS Carbon Footprint Tracking?
+                
+                Monitor and reduce the carbon emissions from your AWS cloud infrastructure by tracking:
+                - CO2 emissions by service (EC2, S3, RDS, etc.)
+                - Regional carbon intensity differences
+                - Month-over-month emission trends
+                - Sustainability recommendations
+                
+                ### 🚀 How to Track Your Carbon Footprint:
+                
+                **Option 1: AWS Customer Carbon Footprint Tool**
+                1. Go to [AWS Billing Console](https://console.aws.amazon.com/billing/home#/account)
+                2. Navigate to **Customer Carbon Footprint Tool**
+                3. View your historical emissions data
+                4. Download detailed reports
+                
+                **Option 2: Future Platform Integration** (Coming Soon)
+                - Automated carbon calculation from your AWS usage
+                - Real-time sustainability metrics
+                - Carbon reduction recommendations
+                - Renewable energy migration suggestions
+                
+                ### 💡 What You'll Get:
+                - ✅ Total CO2 emissions (kg)
+                - ✅ Emissions by AWS service
+                - ✅ Regional breakdown
+                - ✅ Month-over-month trends
+                - ✅ Sustainability score
+                - ✅ Renewable energy percentage
+                
+                ### 🔄 For Now:
+                Switch to **Demo Mode** (sidebar) to see simulated carbon tracking in action.
+                """)
+                
+                st.markdown("---")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.info("""
+                    **Carbon Reduction Tips:**
+                    
+                    🌱 Use AWS regions with renewable energy
+                    🌱 Right-size your EC2 instances
+                    🌱 Use ARM-based Graviton processors
+                    🌱 Optimize storage (delete unused data)
+                    🌱 Use serverless when possible
+                    """)
+                
+                with col2:
+                    st.success("""
+                    **Low-Carbon AWS Regions:**
+                    
+                    🇨🇦 Canada (Montreal) - 80% renewable
+                    🇧🇷 South America (São Paulo)
+                    🇸🇪 Europe (Stockholm)
+                    🇩🇪 Europe (Frankfurt)
+                    🇺🇸 US West (Oregon)
+                    """)
+            else:
+                st.info("No carbon data available in demo mode")
+            
+            return
+        
+        # We have carbon data - render normally
+        st.info("📊 Track and optimize your cloud carbon footprint for a sustainable future")
         
         # Top metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -1560,18 +1681,65 @@ class FinOpsEnterpriseModule:
         # Show mode indicator
         demo_mgr = DemoModeManager()
         if not demo_mgr.is_demo_mode:
-            st.info("""
-            💡 **Live Mode:** Budget Management
+            # Live mode - show setup instructions instead of dummy data
+            st.warning("### ⚠️ AWS Budgets Not Integrated")
             
-            In Live Mode, this section would integrate with **AWS Budgets** to show:
-            - Real budget vs actual spend
-            - Forecast vs budget limits
-            - Budget alerts and notifications
-            - Cost allocation by account/service
+            st.markdown("""
+            **AWS Budgets** integration is not yet available on this platform.
             
-            **For now, showing simulated budget data for demonstration.**
+            ### 💰 What is AWS Budgets?
+            
+            AWS Budgets lets you set custom cost and usage budgets that alert you when you exceed (or are forecasted to exceed) your budgeted amount.
+            
+            ### 🚀 How to Set Up AWS Budgets:
+            
+            **In AWS Console:**
+            1. Go to [AWS Budgets Console](https://console.aws.amazon.com/billing/home#/budgets)
+            2. Click **Create budget**
+            3. Choose budget type (Cost, Usage, Savings Plans, Reservation)
+            4. Set amount and time period (monthly, quarterly, annual)
+            5. Configure alerts (email/SNS at 80%, 100%, 120% of budget)
+            6. Add optional actions (stop EC2, deny IAM policies)
+            
+            ### 💡 What You Get:
+            - ✅ Monthly cost/usage budgets
+            - ✅ Forecast-based alerts
+            - ✅ Email/SNS notifications
+            - ✅ Automatic actions on threshold breach
+            - ✅ Budget vs actual tracking
+            - ✅ Custom filters (service, tag, account)
+            
+            ### 🔄 For Now:
+            Switch to **Demo Mode** to see simulated budget tracking.
             """)
+            
+            st.markdown("---")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info("""
+                **Budget Best Practices:**
+                
+                💰 Set budgets 10-15% above expected
+                📧 Alert at 80%, 90%, 100%
+                🔔 Use SNS for team notifications
+                🎯 Create budgets per environment
+                📊 Review and adjust monthly
+                """)
+            
+            with col2:
+                st.success("""
+                **Budget Types:**
+                
+                💵 **Cost Budget** - Dollar amount
+                📊 **Usage Budget** - Hours, GB, etc.
+                💳 **RI Budget** - Reservation utilization
+                🎯 **Savings Plans** - Commitment coverage
+                """)
+            
+            return
         
+        # Demo mode - show simulated budgets
         budgets = [
             {'Budget Name': 'Production Monthly', 'Amount': '$15,000', 'Current Spend': '$11,400', 'Utilization': '76%', 'Forecast': '$14,250', 'Status': '✅ On Track'},
             {'Budget Name': 'Staging Monthly', 'Amount': '$5,000', 'Current Spend': '$4,650', 'Utilization': '93%', 'Forecast': '$5,580', 'Status': '⚠️ At Risk'},
@@ -1590,18 +1758,80 @@ class FinOpsEnterpriseModule:
         # Show mode indicator
         demo_mgr = DemoModeManager()
         if not demo_mgr.is_demo_mode:
-            st.info("""
-            💡 **Live Mode:** Tag-Based Cost Allocation
+            # Live mode - show setup instructions
+            st.warning("### ⚠️ Tag-Based Cost Allocation Not Configured")
             
-            In Live Mode, this section would use **AWS Cost Allocation Tags** to show:
-            - Real cost breakdown by tags (Department, Environment, Project, etc.)
-            - Untagged resource costs
-            - Tag compliance percentage
-            - Cost trends by tag value
+            st.markdown("""
+            **Cost Allocation Tags** integration is not yet available on this platform.
             
-            **For now, showing simulated tag data for demonstration.**
+            ### 🏷️ What are Cost Allocation Tags?
+            
+            Tags let you organize and track your AWS costs by custom categories like:
+            - Department (Engineering, Sales, Marketing)
+            - Environment (Production, Staging, Development)
+            - Project (ProjectA, ProjectB)
+            - Cost Center (CC-1001, CC-2002)
+            
+            ### 🚀 How to Set Up Cost Allocation Tags:
+            
+            **Step 1: Tag Your Resources**
+            1. Tag EC2 instances, S3 buckets, RDS databases, etc.
+            2. Use consistent tag keys: `Department`, `Environment`, `Project`
+            3. Apply tags via AWS Console, CLI, or Infrastructure as Code
+            
+            **Step 2: Activate Tags in Billing**
+            1. Go to [AWS Billing Console](https://console.aws.amazon.com/billing/home#/tags)
+            2. Click **Cost Allocation Tags**
+            3. Select user-defined tags to activate
+            4. Wait 24 hours for data to appear
+            
+            **Step 3: View Tagged Costs**
+            1. Use AWS Cost Explorer with GroupBy Tags
+            2. Create Cost and Usage Reports with tag columns
+            3. Set up tag-based budgets and alerts
+            
+            ### 💡 What You'll Get:
+            - ✅ Cost breakdown by department/team
+            - ✅ Project-level cost tracking
+            - ✅ Environment cost comparison
+            - ✅ Untagged resource identification
+            - ✅ Tag compliance reporting
+            - ✅ Chargeback/showback capabilities
+            
+            ### 🔄 For Now:
+            Switch to **Demo Mode** to see simulated tag-based costs.
             """)
+            
+            st.markdown("---")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info("""
+                **Tagging Best Practices:**
+                
+                🏷️ Use consistent naming (PascalCase)
+                🏷️ Define mandatory tags (Owner, Environment)
+                🏷️ Automate tagging with Terraform/CloudFormation
+                🏷️ Enforce tagging with AWS Config rules
+                🏷️ Review untagged resources monthly
+                """)
+            
+            with col2:
+                st.success("""
+                **Common Tag Keys:**
+                
+                👥 Department
+                🌍 Environment  
+                📦 Project
+                💰 CostCenter
+                👤 Owner
+                📅 CreatedDate
+                🎯 Application
+                """)
+            
+            return
         
+        # Demo mode - show simulated tag costs
         tag_costs = [
             {'Tag': 'Department', 'Value': 'Engineering', 'Cost': '$8,450', 'Percentage': '42%'},
             {'Tag': 'Department', 'Value': 'Data Science', 'Cost': '$5,230', 'Percentage': '26%'},
