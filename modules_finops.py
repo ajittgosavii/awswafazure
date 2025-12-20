@@ -614,7 +614,8 @@ def get_cost_data(account_mgr=None) -> Dict:
             session = get_aws_session()
             
             if not session:
-                # No AWS connection - return empty data
+                # No AWS connection - return empty data with helpful message
+                st.warning("⚠️ No AWS session available")
                 return {
                     'total_cost': 0,
                     'services': {},
@@ -631,24 +632,39 @@ def get_cost_data(account_mgr=None) -> Dict:
             # Get daily trend
             trend_result = ce_service.get_cost_trend(days=30)
             
+            # Extract data safely
+            total_cost = service_result.get('total', 0) if service_result.get('success') else 0
+            services = service_result.get('costs', {}) if service_result.get('success') else {}
+            daily_costs = trend_result.get('daily_costs', []) if trend_result.get('success') else []
+            
             # Build response
             cost_data = {
-                'total_cost': service_result.get('total', 0) if service_result.get('success') else 0,
-                'services': service_result.get('costs', {}) if service_result.get('success') else {},
-                'daily_costs': trend_result.get('daily_costs', []) if trend_result.get('success') else [],
-                'by_account': {},  # Would need multi-account cost data
+                'total_cost': total_cost,
+                'services': services,
+                'daily_costs': daily_costs,
+                'by_account': {},  # Would need multi-account cost data - not available via standard API
                 'source': 'aws_cost_explorer',
                 'last_updated': datetime.now().isoformat()
             }
             
-            # Show success feedback
-            if cost_data['total_cost'] > 0:
-                st.success(f"✅ Successfully fetched real AWS Cost Explorer data - Total: {Helpers.format_currency(cost_data['total_cost'])}")
+            # Show appropriate feedback
+            if total_cost > 0:
+                st.success(f"✅ Successfully fetched real AWS Cost Explorer data - Total: {Helpers.format_currency(total_cost)}")
+            elif not service_result.get('success') or not trend_result.get('success'):
+                # API calls failed
+                error_msg = service_result.get('error') or trend_result.get('error', 'Unknown error')
+                st.warning(f"⚠️ Cost Explorer API returned no data: {error_msg}")
+                st.info("💡 Ensure Cost Explorer is enabled (takes 24 hours after enabling) and you have ce:GetCostAndUsage permissions")
+                cost_data['error'] = error_msg
+            else:
+                # API calls succeeded but returned zero costs
+                st.info("💡 Cost Explorer returned $0 - Your account may have no costs in the last 30 days")
             
             return cost_data
             
         except Exception as e:
-            st.warning(f"⚠️ Could not fetch AWS Cost Explorer data: {str(e)}")
+            error_msg = str(e)
+            st.warning(f"⚠️ Could not fetch AWS Cost Explorer data: {error_msg}")
             st.info("💡 Ensure Cost Explorer is enabled in your AWS account and you have ce:GetCostAndUsage permissions")
             # Return empty data structure
             return {
@@ -656,7 +672,7 @@ def get_cost_data(account_mgr=None) -> Dict:
                 'services': {},
                 'daily_costs': [],
                 'by_account': {},
-                'error': str(e)
+                'error': error_msg
             }
 
 def get_recommendations(account_mgr=None) -> List[Dict]:
@@ -826,35 +842,50 @@ class FinOpsEnterpriseModule:
         # Cost by service
         st.markdown("### 💸 Cost by Service")
         
-        service_df = pd.DataFrame([
-            {'Service': k, 'Cost': v}
-            for k, v in cost_data['services'].items()
-        ]).sort_values('Cost', ascending=False)
+        # Check if we have service cost data
+        if not cost_data.get('services') or len(cost_data['services']) == 0:
+            st.warning("⚠️ No service-level cost data available")
+            
+            if cost_data.get('error'):
+                st.error(f"Error: {cost_data['error']}")
+            
+            st.markdown("**Possible reasons:**")
+            st.markdown("- Cost Explorer not enabled (takes 24 hours after enabling)")
+            st.markdown("- No AWS costs in the last 30 days")
+            st.markdown("- IAM permission `ce:GetCostAndUsage` may be missing")
+            
+            if cost_data.get('total_cost', 0) > 0:
+                st.info(f"💰 Total cost is available: {Helpers.format_currency(cost_data['total_cost'])}")
+        else:
+            service_df = pd.DataFrame([
+                {'Service': k, 'Cost': v}
+                for k, v in cost_data['services'].items()
+            ]).sort_values('Cost', ascending=False)
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                fig = px.bar(
+                    service_df,
+                    x='Service',
+                    y='Cost',
+                    title='Monthly Cost by Service',
+                    color='Cost',
+                    color_continuous_scale='Blues'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                fig_pie = px.pie(
+                    service_df.head(5),
+                    values='Cost',
+                    names='Service',
+                    title='Top 5 Services'
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
         
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            fig = px.bar(
-                service_df,
-                x='Service',
-                y='Cost',
-                title='Monthly Cost by Service',
-                color='Cost',
-                color_continuous_scale='Blues'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            fig_pie = px.pie(
-                service_df.head(5),
-                values='Cost',
-                names='Service',
-                title='Top 5 Services'
-            )
-            st.plotly_chart(fig_pie, use_container_width=True)
-        
-        # Quick AI analysis if available
-        if ai_available:
+        # Quick AI analysis if available (only if we have service data)
+        if ai_available and cost_data.get('services') and len(cost_data['services']) > 0:
             st.markdown("---")
             st.markdown("### 🤖 Quick AI Analysis")
             
@@ -1280,12 +1311,26 @@ class FinOpsEnterpriseModule:
         
         cost_data = get_cost_data()  # No longer needs account_mgr
         
+        # Check if we have multi-account data
+        if not cost_data.get('by_account') or len(cost_data['by_account']) == 0:
+            st.info("💡 Multi-account cost breakdown not available")
+            st.markdown("**Why you're seeing this:**")
+            st.markdown("- In **Live Mode**: AWS Cost Explorer API doesn't provide account-level breakdown by default")
+            st.markdown("- In **Demo Mode**: Multi-account data should be available - try refreshing")
+            
+            st.markdown("---")
+            st.markdown("**To get multi-account costs in Live Mode:**")
+            st.markdown("1. Use AWS Cost Explorer's **Linked Account** dimension")
+            st.markdown("2. Configure Organizations API access")
+            st.markdown("3. Use AWS Cost and Usage Reports (CUR) with Athena")
+            return
+        
         account_df = pd.DataFrame([
             {
                 'Account': k,
                 'Cost': v,
                 'Cost_Formatted': Helpers.format_currency(v),
-                'Percentage': f"{(v / cost_data['total_cost'] * 100):.1f}%"
+                'Percentage': f"{(v / cost_data['total_cost'] * 100):.1f}%" if cost_data['total_cost'] > 0 else "0%"
             }
             for k, v in cost_data['by_account'].items()
         ]).sort_values('Cost', ascending=False)
@@ -1319,6 +1364,18 @@ class FinOpsEnterpriseModule:
         st.markdown("### 📈 Cost Trends (30 Days)")
         
         cost_data = get_cost_data()
+        
+        # Check if we have daily cost data
+        if not cost_data.get('daily_costs') or len(cost_data['daily_costs']) == 0:
+            st.info("💡 Daily cost trend data not available")
+            st.markdown("**Possible reasons:**")
+            st.markdown("- Insufficient historical data (Cost Explorer requires 24+ hours)")
+            st.markdown("- Cost Explorer not enabled in your AWS account")
+            st.markdown("- API returned no daily cost data")
+            
+            if cost_data.get('total_cost', 0) > 0:
+                st.success(f"✅ Total cost data available: {Helpers.format_currency(cost_data['total_cost'])}")
+            return
         
         trend_df = pd.DataFrame(cost_data['daily_costs'])
         trend_df['date'] = pd.to_datetime(trend_df['date'])
