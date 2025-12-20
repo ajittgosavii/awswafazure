@@ -25,6 +25,7 @@ from config_settings import AppConfig
 from core_account_manager import get_account_manager
 from utils_helpers import Helpers
 from auth_azure_sso import require_permission
+from demo_mode_manager import DemoModeManager
 import json
 import os
 import random
@@ -589,6 +590,92 @@ def generate_demo_recommendations() -> List[Dict]:
     ]
 
 # ============================================================================
+# MODE-AWARE DATA FETCHING
+# ============================================================================
+
+def get_cost_data(account_mgr=None) -> Dict:
+    """
+    Get cost data based on current mode (demo or live)
+    In live mode, fetches real AWS Cost Explorer data
+    In demo mode, returns simulated data
+    """
+    demo_mgr = DemoModeManager()
+    
+    if demo_mgr.is_demo_mode:
+        # Demo mode - return simulated data
+        return generate_demo_cost_data()
+    else:
+        # Live mode - fetch real AWS data
+        if not account_mgr:
+            account_mgr = get_account_manager()
+        
+        if not account_mgr or not account_mgr.get_current_session():
+            # No AWS connection - return empty data
+            return {
+                'total_cost': 0,
+                'services': {},
+                'daily_costs': [],
+                'by_account': {},
+                'error': 'No AWS session available'
+            }
+        
+        try:
+            from aws_cost_explorer import CostExplorerService
+            
+            session = account_mgr.get_current_session()
+            ce_service = CostExplorerService(session)
+            
+            # Get cost by service (last 30 days)
+            service_result = ce_service.get_cost_by_service(days=30)
+            
+            # Get daily trend
+            trend_result = ce_service.get_cost_trend(days=30)
+            
+            # Build response
+            cost_data = {
+                'total_cost': service_result.get('total', 0) if service_result.get('success') else 0,
+                'services': service_result.get('costs', {}) if service_result.get('success') else {},
+                'daily_costs': trend_result.get('daily_costs', []) if trend_result.get('success') else [],
+                'by_account': {},  # Would need multi-account cost data
+                'source': 'aws_cost_explorer',
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            # Show success feedback
+            if cost_data['total_cost'] > 0:
+                st.success(f"✅ Successfully fetched real AWS Cost Explorer data - Total: {Helpers.format_currency(cost_data['total_cost'])}")
+            
+            return cost_data
+            
+        except Exception as e:
+            st.warning(f"⚠️ Could not fetch AWS Cost Explorer data: {str(e)}")
+            st.info("💡 Ensure Cost Explorer is enabled in your AWS account and you have ce:GetCostAndUsage permissions")
+            # Return empty data structure
+            return {
+                'total_cost': 0,
+                'services': {},
+                'daily_costs': [],
+                'by_account': {},
+                'error': str(e)
+            }
+
+def get_recommendations(account_mgr=None) -> List[Dict]:
+    """
+    Get recommendations based on current mode (demo or live)
+    In live mode, could fetch real AWS Trusted Advisor / Compute Optimizer data
+    In demo mode, returns simulated recommendations
+    """
+    demo_mgr = DemoModeManager()
+    
+    if demo_mgr.is_demo_mode:
+        # Demo mode - return simulated recommendations
+        return generate_demo_recommendations()
+    else:
+        # Live mode - for now return demo recommendations
+        # TODO: Integrate with AWS Trusted Advisor / Compute Optimizer
+        return generate_demo_recommendations()
+
+# ============================================================================
 # MAIN FINOPS MODULE
 # ============================================================================
 
@@ -603,6 +690,13 @@ class FinOpsEnterpriseModule:
         
         st.markdown("## 💰 Enterprise FinOps, Cost Intelligence & Sustainability")
         st.caption("AI-Powered Financial Operations | Cost Anomaly Detection | Carbon Emissions Tracking | Intelligent Optimization")
+        
+        # Show current data source mode
+        demo_mgr = DemoModeManager()
+        if demo_mgr.is_demo_mode:
+            st.info("🎭 **Demo Mode** - Displaying simulated cost data for demonstration purposes")
+        else:
+            st.success("🔴 **Live Mode** - Fetching real AWS Cost Explorer data from connected account")
         
         # Add refresh button for cache management
         PerformanceOptimizer.add_refresh_button([
@@ -681,7 +775,7 @@ class FinOpsEnterpriseModule:
         
         st.markdown("### 🎯 Cost Overview")
         
-        cost_data = generate_demo_cost_data()
+        cost_data = get_cost_data(account_mgr)
         
         # Top metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -1097,7 +1191,7 @@ class FinOpsEnterpriseModule:
             st.info("Configure ANTHROPIC_API_KEY in Streamlit secrets to enable AI features")
             return
         
-        cost_data = generate_demo_cost_data()
+        cost_data = get_cost_data()
         
         with st.spinner("🤖 AI analyzing your cost data..."):
             analysis = analyze_costs_with_ai(cost_data, cost_data['total_cost'], cost_data['services'])
@@ -1160,7 +1254,7 @@ class FinOpsEnterpriseModule:
         
         if st.button("🔍 Ask AI", type="primary", key="finops_ask_ai_submit_btn"):
             if query:
-                cost_data = generate_demo_cost_data()
+                cost_data = get_cost_data()
                 
                 with st.spinner("🤖 AI thinking..."):
                     response = natural_language_query(query, cost_data)
@@ -1177,7 +1271,7 @@ class FinOpsEnterpriseModule:
         
         st.markdown("### 📊 Multi-Account Cost Analysis")
         
-        cost_data = generate_demo_cost_data()
+        cost_data = get_cost_data(account_mgr)
         
         account_df = pd.DataFrame([
             {
@@ -1217,7 +1311,7 @@ class FinOpsEnterpriseModule:
         
         st.markdown("### 📈 Cost Trends (30 Days)")
         
-        cost_data = generate_demo_cost_data()
+        cost_data = get_cost_data()
         
         trend_df = pd.DataFrame(cost_data['daily_costs'])
         trend_df['date'] = pd.to_datetime(trend_df['date'])
@@ -1266,7 +1360,7 @@ class FinOpsEnterpriseModule:
         
         st.markdown("### 💡 Cost Optimization Opportunities")
         
-        recommendations = generate_demo_recommendations()
+        recommendations = get_recommendations()
         
         total_monthly_savings = sum(
             float(rec['savings'].replace('$', '').replace(',', '').replace('/month', ''))
