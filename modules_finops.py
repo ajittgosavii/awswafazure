@@ -691,6 +691,65 @@ def get_recommendations(account_mgr=None) -> List[Dict]:
         # TODO: Integrate with AWS Trusted Advisor / Compute Optimizer
         return generate_demo_recommendations()
 
+def get_anomalies() -> List[Dict]:
+    """
+    Get cost anomalies based on current mode (demo or live)
+    In live mode, fetches real AWS Cost Anomaly Detection data
+    In demo mode, returns simulated anomalies
+    """
+    demo_mgr = DemoModeManager()
+    
+    if demo_mgr.is_demo_mode:
+        # Demo mode - return simulated anomalies
+        return generate_cost_anomalies()
+    else:
+        # Live mode - fetch real AWS Cost Anomaly Detection data
+        st.info("💡 **Live Mode:** Cost Anomaly Detection")
+        st.markdown("""
+        In Live Mode, this section would integrate with **AWS Cost Anomaly Detection** service to show real anomalies.
+        
+        **To enable real anomaly detection:**
+        1. Go to AWS Console → Billing → Cost Anomaly Detection
+        2. Create an anomaly monitor
+        3. Configure alert subscriptions
+        4. Integrate via AWS SDK (boto3)
+        
+        **For now, showing simulated data for demonstration purposes.**
+        """)
+        
+        # For now, return demo data in Live mode too
+        # TODO: Integrate with AWS Cost Anomaly Detection API
+        return generate_cost_anomalies()
+
+def get_carbon_data() -> Dict:
+    """
+    Get carbon footprint data based on current mode (demo or live)
+    In live mode, calculates real emissions from AWS usage
+    In demo mode, returns simulated carbon data
+    """
+    demo_mgr = DemoModeManager()
+    
+    if demo_mgr.is_demo_mode:
+        # Demo mode - return simulated carbon data
+        return generate_carbon_footprint_data()
+    else:
+        # Live mode - calculate real carbon emissions
+        st.info("💡 **Live Mode:** Sustainability & Carbon Tracking")
+        st.markdown("""
+        In Live Mode, this section calculates real carbon emissions based on your AWS usage.
+        
+        **How it works:**
+        1. Fetches your AWS resource usage (EC2, S3, etc.)
+        2. Gets region-specific carbon intensity data
+        3. Calculates CO2 emissions using AWS Customer Carbon Footprint Tool methodology
+        
+        **For now, showing simulated data for demonstration purposes.**
+        """)
+        
+        # For now, return demo data in Live mode too
+        # TODO: Calculate real carbon emissions from AWS usage
+        return generate_carbon_footprint_data()
+
 # ============================================================================
 # MAIN FINOPS MODULE
 # ============================================================================
@@ -917,7 +976,7 @@ class FinOpsEnterpriseModule:
         st.markdown("### 🚨 Cost Anomaly Detection")
         st.info("📊 ML-powered detection of unusual spending patterns and cost spikes")
         
-        anomalies = generate_cost_anomalies()
+        anomalies = get_anomalies()  # Mode-aware function
         
         # Summary metrics
         total_waste = sum(
@@ -1124,7 +1183,7 @@ class FinOpsEnterpriseModule:
         st.markdown("### 🌱 Sustainability & Carbon Emissions")
         st.info("📊 Track and optimize your cloud carbon footprint for a sustainable future")
         
-        carbon_data = generate_carbon_footprint_data()
+        carbon_data = get_carbon_data()  # Mode-aware function
         
         # Top metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -1498,6 +1557,21 @@ class FinOpsEnterpriseModule:
         
         st.markdown("### 🎯 Budget Management")
         
+        # Show mode indicator
+        demo_mgr = DemoModeManager()
+        if not demo_mgr.is_demo_mode:
+            st.info("""
+            💡 **Live Mode:** Budget Management
+            
+            In Live Mode, this section would integrate with **AWS Budgets** to show:
+            - Real budget vs actual spend
+            - Forecast vs budget limits
+            - Budget alerts and notifications
+            - Cost allocation by account/service
+            
+            **For now, showing simulated budget data for demonstration.**
+            """)
+        
         budgets = [
             {'Budget Name': 'Production Monthly', 'Amount': '$15,000', 'Current Spend': '$11,400', 'Utilization': '76%', 'Forecast': '$14,250', 'Status': '✅ On Track'},
             {'Budget Name': 'Staging Monthly', 'Amount': '$5,000', 'Current Spend': '$4,650', 'Utilization': '93%', 'Forecast': '$5,580', 'Status': '⚠️ At Risk'},
@@ -1512,6 +1586,21 @@ class FinOpsEnterpriseModule:
         """Tag-based cost allocation"""
         
         st.markdown("### 🏷️ Tag-Based Cost Allocation")
+        
+        # Show mode indicator
+        demo_mgr = DemoModeManager()
+        if not demo_mgr.is_demo_mode:
+            st.info("""
+            💡 **Live Mode:** Tag-Based Cost Allocation
+            
+            In Live Mode, this section would use **AWS Cost Allocation Tags** to show:
+            - Real cost breakdown by tags (Department, Environment, Project, etc.)
+            - Untagged resource costs
+            - Tag compliance percentage
+            - Cost trends by tag value
+            
+            **For now, showing simulated tag data for demonstration.**
+            """)
         
         tag_costs = [
             {'Tag': 'Department', 'Value': 'Engineering', 'Cost': '$8,450', 'Percentage': '42%'},
