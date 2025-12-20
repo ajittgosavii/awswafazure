@@ -857,32 +857,39 @@ class FinOpsEnterpriseModule:
             if cost_data.get('total_cost', 0) > 0:
                 st.info(f"💰 Total cost is available: {Helpers.format_currency(cost_data['total_cost'])}")
         else:
-            service_df = pd.DataFrame([
+            # Create list of service data
+            service_data = [
                 {'Service': k, 'Cost': v}
                 for k, v in cost_data['services'].items()
-            ]).sort_values('Cost', ascending=False)
+            ]
             
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                fig = px.bar(
-                    service_df,
-                    x='Service',
-                    y='Cost',
-                    title='Monthly Cost by Service',
-                    color='Cost',
-                    color_continuous_scale='Blues'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                fig_pie = px.pie(
-                    service_df.head(5),
-                    values='Cost',
-                    names='Service',
-                    title='Top 5 Services'
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
+            # Double check we have data
+            if not service_data:
+                st.warning("⚠️ Service data is empty")
+            else:
+                service_df = pd.DataFrame(service_data).sort_values('Cost', ascending=False)
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    fig = px.bar(
+                        service_df,
+                        x='Service',
+                        y='Cost',
+                        title='Monthly Cost by Service',
+                        color='Cost',
+                        color_continuous_scale='Blues'
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    fig_pie = px.pie(
+                        service_df.head(5),
+                        values='Cost',
+                        names='Service',
+                        title='Top 5 Services'
+                    )
+                    st.plotly_chart(fig_pie, use_container_width=True)
         
         # Quick AI analysis if available (only if we have service data)
         if ai_available and cost_data.get('services') and len(cost_data['services']) > 0:
@@ -1325,15 +1332,24 @@ class FinOpsEnterpriseModule:
             st.markdown("3. Use AWS Cost and Usage Reports (CUR) with Athena")
             return
         
-        account_df = pd.DataFrame([
+        # Create list of account data
+        account_data = [
             {
                 'Account': k,
                 'Cost': v,
                 'Cost_Formatted': Helpers.format_currency(v),
-                'Percentage': f"{(v / cost_data['total_cost'] * 100):.1f}%" if cost_data['total_cost'] > 0 else "0%"
+                'Percentage': f"{(v / cost_data['total_cost'] * 100):.1f}%" if cost_data.get('total_cost', 0) > 0 else "0%"
             }
             for k, v in cost_data['by_account'].items()
-        ]).sort_values('Cost', ascending=False)
+        ]
+        
+        # Double check we have data before creating DataFrame
+        if not account_data:
+            st.warning("⚠️ Account data is empty")
+            return
+        
+        # Now safe to create and sort DataFrame
+        account_df = pd.DataFrame(account_data).sort_values('Cost', ascending=False)
         
         col1, col2 = st.columns([2, 1])
         
@@ -1377,7 +1393,18 @@ class FinOpsEnterpriseModule:
                 st.success(f"✅ Total cost data available: {Helpers.format_currency(cost_data['total_cost'])}")
             return
         
+        # Double check the list isn't empty
+        if not cost_data['daily_costs']:
+            st.warning("⚠️ Daily costs list is empty")
+            return
+        
         trend_df = pd.DataFrame(cost_data['daily_costs'])
+        
+        # Verify DataFrame has required columns
+        if 'date' not in trend_df.columns or 'cost' not in trend_df.columns:
+            st.error("⚠️ Daily cost data is missing required fields (date, cost)")
+            return
+        
         trend_df['date'] = pd.to_datetime(trend_df['date'])
         trend_df['7day_avg'] = trend_df['cost'].rolling(window=7).mean()
         
