@@ -713,6 +713,7 @@ def run_enhanced_single_account_scan(session, account_id, region, scan_mode, waf
         progress_bar.empty()
 
 
+@st.cache_data(ttl=300, show_spinner="Fetching Security Hub findings...")  # 5 min cache
 def fetch_and_analyze_security_hub(hub_region, use_hub_creds, severity_filter, max_findings,
                                    enable_ai, enable_waf_mapping, generate_consolidated_pdf, generate_account_pdfs):
     """Fetch Security Hub findings and apply AI analysis"""
@@ -1034,6 +1035,7 @@ def scan_real_aws_account_enhanced(account, depth, pillars, region, status_text)
 
 
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour - services rarely change
 def get_services_by_scan_depth(depth):
     """Return services to scan based on scan depth"""
     
@@ -1072,6 +1074,7 @@ def get_services_by_scan_depth(depth):
         return standard_services
 
 
+@st.cache_data(ttl=300, show_spinner=False)  # 5 min cache for Live mode
 def scan_rds_service(session, region, result, status_text, account_name):
     """Scan RDS databases"""
     try:
@@ -1123,6 +1126,7 @@ def scan_rds_service(session, region, result, status_text, account_name):
         result['resources']['RDS'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_vpc_service(session, region, result, status_text, account_name):
     """Scan VPC and Security Groups"""
     try:
@@ -1166,6 +1170,7 @@ def scan_vpc_service(session, region, result, status_text, account_name):
         result['resources']['VPC'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_iam_service(session, result, status_text, account_name):
     """Scan IAM users and policies"""
     try:
@@ -1215,6 +1220,7 @@ def scan_iam_service(session, result, status_text, account_name):
         result['resources']['IAM'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_lambda_service(session, region, result, status_text, account_name):
     """Scan Lambda functions"""
     try:
@@ -1244,6 +1250,7 @@ def scan_lambda_service(session, region, result, status_text, account_name):
         result['resources']['Lambda'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_dynamodb_service(session, region, result, status_text, account_name):
     """Scan DynamoDB tables"""
     try:
@@ -1289,6 +1296,7 @@ def scan_dynamodb_service(session, region, result, status_text, account_name):
         result['resources']['DynamoDB'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_cloudwatch_service(session, region, result, status_text, account_name):
     """Scan CloudWatch alarms"""
     try:
@@ -1314,6 +1322,7 @@ def scan_cloudwatch_service(session, region, result, status_text, account_name):
         result['resources']['CloudWatch'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_cloudtrail_service(session, region, result, status_text, account_name):
     """Scan CloudTrail trails"""
     try:
@@ -1356,6 +1365,7 @@ def scan_cloudtrail_service(session, region, result, status_text, account_name):
         result['resources']['CloudTrail'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_kms_service(session, region, result, status_text, account_name):
     """Scan KMS encryption keys"""
     try:
@@ -1395,6 +1405,7 @@ def scan_kms_service(session, region, result, status_text, account_name):
         result['resources']['KMS'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_elb_service(session, region, result, status_text, account_name):
     """Scan Elastic Load Balancers"""
     try:
@@ -1429,6 +1440,7 @@ def scan_elb_service(session, region, result, status_text, account_name):
         result['resources']['ELB'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_ecs_service(session, region, result, status_text, account_name):
     """Scan ECS clusters"""
     try:
@@ -1474,6 +1486,7 @@ def scan_autoscaling_service(session, region, result, status_text, account_name)
         result['resources']['Auto Scaling'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_ebs_service(session, region, result, status_text, account_name):
     """Scan EBS volumes"""
     try:
@@ -1503,6 +1516,7 @@ def scan_ebs_service(session, region, result, status_text, account_name):
         result['resources']['EBS'] = {'error': str(e)[:100]}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def scan_secrets_manager_service(session, region, result, status_text, account_name):
     """Scan Secrets Manager secrets"""
     try:

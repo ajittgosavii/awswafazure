@@ -29,59 +29,6 @@ from demo_mode_manager import (
     render_demo_account_info
 )
 
-
-# Performance: Initialize session state for caching
-if 'app_cache_initialized' not in st.session_state:
-    st.session_state.app_cache_initialized = True
-    st.session_state.cached_accounts = None
-    st.session_state.cached_identity = None
-    st.session_state.last_scan_results = None
-
-# ============================================================================
-# PERFORMANCE OPTIMIZATIONS - Added for faster tab loading
-# ============================================================================
-
-def get_cached_session():
-    """Get cached AWS session from session state"""
-    if 'aws_session_cache' not in st.session_state:
-        st.session_state.aws_session_cache = None
-        st.session_state.aws_session_time = None
-    
-    # Check if session is still valid (5 min cache)
-    import time
-    if st.session_state.aws_session_cache and st.session_state.aws_session_time:
-        if time.time() - st.session_state.aws_session_time < 300:
-            return st.session_state.aws_session_cache
-    
-    # Get fresh session
-    try:
-        from aws_connector import get_aws_session
-        session = get_aws_session()
-        st.session_state.aws_session_cache = session
-        st.session_state.aws_session_time = time.time()
-        return session
-    except:
-        return None
-
-def init_performance_cache():
-    """Initialize session state for performance"""
-    defaults = {
-        'perf_initialized': True,
-        'cached_accounts': None,
-        'cached_identity': None,
-        'last_scan_time': None,
-        'last_scan_results': None,
-        'tab_load_times': {},
-    }
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
-
-# Initialize performance cache on app load
-init_performance_cache()
-
-# ============================================================================
-
 # ==================================================================================
 # AUTHENTICATION - Azure AD SSO + Firebase (Multicloud Approach)
 # ==================================================================================
@@ -381,7 +328,6 @@ def render_header():
 # SIDEBAR
 # ============================================================================
 
-@st.fragment
 def render_sidebar():
     """Render sidebar with AWS connection status and mode toggle"""
     
@@ -590,7 +536,6 @@ def render_sidebar():
 # AWS CONNECTOR TAB
 # ============================================================================
 
-@st.fragment
 def render_aws_connector_tab():
     """AWS Connector for Single/Multi-Account WAF Scanning"""
     
@@ -1395,7 +1340,6 @@ def render_multi_account_connector():
 # WAF SCANNER TAB
 # ============================================================================
 
-@st.fragment
 def render_waf_scanner_tab():
     """
     AI-Integrated WAF Scanner with Demo Mode Support
@@ -3004,7 +2948,6 @@ def display_multi_account_results(results):
 # LIGHTWEIGHT ADMIN PANEL - Firebase Realtime Database
 # ============================================================================
 
-@st.fragment
 def render_admin_panel_firebase():
     """Lightweight Admin Panel using Firebase Realtime Database directly"""
     
