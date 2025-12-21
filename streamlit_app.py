@@ -3,6 +3,7 @@ AI-Based AWS Well-Architected Framework Advisor
 AWS-focused architecture design and assessment platform
 
 RECENT UPDATES:
+- Added Unified WAF Assessment (combines Scanner + Assessment workflow)
 - Integrated AI-Enhanced WAF Scanner (replaces basic scanner)
 - Quick Scan moved from WAF Assessment to WAF Scanner (as scan mode)
 - AI-powered analysis with Claude API
@@ -17,6 +18,7 @@ RECENT UPDATES:
 import streamlit as st
 import sys
 from datetime import datetime
+from waf_unified_workflow import render_unified_waf_workflow
 
 # Import integrated WAF scanner (keeps all functionality + adds AI)
 from waf_scanner_integrated import render_integrated_waf_scanner
@@ -3185,6 +3187,7 @@ def render_main_content():
     base_tabs = [
         "🔍 WAF Scanner",
         "☁️ AWS Connector",
+        "🔗 Unified Assessment",  # NEW: Combined Scanner + Assessment workflow
         "⚡ WAF Assessment",
         "🎨 Architecture Designer",
         "💰 Cost Optimization",
@@ -3212,8 +3215,18 @@ def render_main_content():
     with tabs[1]:
         render_aws_connector_tab()
     
-    # Tab 3: WAF Assessment
+    # Tab 3: Unified Assessment (NEW - Combined Scanner + Assessment)
     with tabs[2]:
+        try:
+            render_unified_waf_workflow()
+        except Exception as e:
+            st.error(f"Error loading Unified Assessment: {str(e)}")
+            import traceback
+            with st.expander("Error Details"):
+                st.code(traceback.format_exc())
+    
+    # Tab 4: WAF Assessment (shifted from index 2 to 3)
+    with tabs[3]:
         if MODULE_STATUS.get('WAF Review'):
             try:
                 render_waf_review_tab()
@@ -3222,8 +3235,8 @@ def render_main_content():
         else:
             st.error("WAF Review module not available")
     
-    # Tab 4: Architecture Designer (Revamped with Use Cases)
-    with tabs[3]:
+    # Tab 5: Architecture Designer (shifted from index 3 to 4)
+    with tabs[4]:
         if MODULE_STATUS.get('Architecture Designer'):
             try:
                 # Use revamped use-case based designer first
@@ -3243,8 +3256,8 @@ def render_main_content():
         else:
             st.error("Architecture Designer module not available")
     
-    # Tab 5: Cost Optimization (FinOps)
-    with tabs[4]:
+    # Tab 6: Cost Optimization (shifted from index 4 to 5)
+    with tabs[5]:
         if MODULE_STATUS.get('FinOps'):
             try:
                 FinOpsEnterpriseModule.render()
@@ -3257,8 +3270,8 @@ def render_main_content():
             st.warning("FinOps module not available")
             st.info("Cost optimization features require the FinOps module.")
     
-    # Tab 6: EKS Modernization (AI-Enhanced v2.0 - Powered by EKS Architecture Wizard)
-    with tabs[5]:
+    # Tab 7: EKS Modernization (shifted from index 5 to 6)
+    with tabs[6]:
         if MODULE_STATUS.get('EKS Modernization'):
             try:
                 EKSArchitectureWizardModule.render()
@@ -3271,8 +3284,8 @@ def render_main_content():
             st.warning("EKS Modernization module not available")
             st.info("The EKS Modernization module provides AI-powered Kubernetes architecture design with Terraform/CloudFormation generation.")
     
-    # Tab 7: Compliance
-    with tabs[6]:
+    # Tab 8: Compliance (shifted from index 6 to 7)
+    with tabs[7]:
         if MODULE_STATUS.get('Compliance'):
             try:
                 ComplianceModule.render()
@@ -3281,8 +3294,8 @@ def render_main_content():
         else:
             st.warning("Compliance module not available")
     
-    # Tab 8: AI Assistant
-    with tabs[7]:
+    # Tab 9: AI Assistant (shifted from index 7 to 8)
+    with tabs[8]:
         if MODULE_STATUS.get('AI Assistant'):
             try:
                 AIAssistantModule.render()
@@ -3295,9 +3308,9 @@ def render_main_content():
             st.warning("AI Assistant module not available")
             st.info("AI-powered assistance requires the AI Assistant module and Anthropic API key.")
     
-    # Tab 9: Admin Panel (only for admins) - Lightweight Firebase Version
-    if show_admin_tab and len(tabs) > 8:
-        with tabs[8]:
+    # Tab 10: Admin Panel (shifted from index 8 to 9) - only for admins
+    if show_admin_tab and len(tabs) > 9:
+        with tabs[9]:
             render_admin_panel_firebase()
 
 # ============================================================================
