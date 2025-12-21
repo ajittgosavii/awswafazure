@@ -2004,61 +2004,203 @@ class FinOpsEnterpriseModule:
         
         # Show mode indicator
         demo_mgr = DemoModeManager()
+        
         if not demo_mgr.is_demo_mode:
-            # Live mode - show setup instructions instead of dummy data
-            st.warning("### ⚠️ AWS Budgets Not Integrated")
-            
-            st.markdown("""
-            **AWS Budgets** integration is not yet available on this platform.
-            
-            ### 💰 What is AWS Budgets?
-            
-            AWS Budgets lets you set custom cost and usage budgets that alert you when you exceed (or are forecasted to exceed) your budgeted amount.
-            
-            ### 🚀 How to Set Up AWS Budgets:
-            
-            **In AWS Console:**
-            1. Go to [AWS Budgets Console](https://console.aws.amazon.com/billing/home#/budgets)
-            2. Click **Create budget**
-            3. Choose budget type (Cost, Usage, Savings Plans, Reservation)
-            4. Set amount and time period (monthly, quarterly, annual)
-            5. Configure alerts (email/SNS at 80%, 100%, 120% of budget)
-            6. Add optional actions (stop EC2, deny IAM policies)
-            
-            ### 💡 What You Get:
-            - ✅ Monthly cost/usage budgets
-            - ✅ Forecast-based alerts
-            - ✅ Email/SNS notifications
-            - ✅ Automatic actions on threshold breach
-            - ✅ Budget vs actual tracking
-            - ✅ Custom filters (service, tag, account)
-            
-            ### 🔄 For Now:
-            Switch to **Demo Mode** to see simulated budget tracking.
-            """)
-            
-            st.markdown("---")
-            
-            col1, col2 = st.columns(2)
-            with col1:
+            # Live mode - fetch real AWS Budgets data
+            try:
+                from aws_connector import get_aws_session
+                from aws_budgets_manager import get_budgets_from_aws
+                
+                # Get AWS session
+                session = get_aws_session()
+                
+                if not session:
+                    st.warning("⚠️ No AWS session available for budget data")
+                    return
+                
+                st.info("💰 Fetching budget data from AWS...")
+                
+                # Get budget data
+                budget_data = get_budgets_from_aws(session)
+                
+                if not budget_data.get('has_budgets', False):
+                    # No budgets configured - show setup instructions
+                    st.warning("### ⚠️ No AWS Budgets Configured")
+                    
+                    st.markdown("""
+                    **AWS Budgets** are not yet set up in your account.
+                    
+                    ### 🚀 Automated Setup Available!
+                    
+                    Run the PowerShell script to automatically create budgets:
+                    
+                    ```powershell
+                    powershell -ExecutionPolicy Bypass -File setup-aws-budgets.ps1
+                    ```
+                    
+                    **What it will create:**
+                    - ✅ Monthly cost budget with your specified amount
+                    - ✅ Email alerts at 80%, 100% thresholds
+                    - ✅ Forecasted spend alerts
+                    - ✅ EC2 usage budget (1000 hours/month)
+                    
+                    ### 💰 What is AWS Budgets?
+                    
+                    AWS Budgets lets you set custom cost and usage budgets that alert you when you exceed (or are forecasted to exceed) your budgeted amount.
+                    
+                    ### 💡 What You'll Get:
+                    - ✅ Monthly cost/usage budgets
+                    - ✅ Forecast-based alerts
+                    - ✅ Email/SNS notifications
+                    - ✅ Budget vs actual tracking
+                    - ✅ Real-time utilization percentage
+                    
+                    ### 🔧 Manual Setup:
+                    1. Go to [AWS Budgets Console](https://console.aws.amazon.com/billing/home#/budgets)
+                    2. Click **Create budget**
+                    3. Choose budget type (Cost, Usage, Savings Plans, Reservation)
+                    4. Set amount and time period (monthly, quarterly, annual)
+                    5. Configure alerts (email/SNS at 80%, 100%, 120% of budget)
+                    
+                    ### 🔄 For Now:
+                    Switch to **Demo Mode** to see simulated budget tracking.
+                    """)
+                    return
+                
+                # We have budgets - display them!
+                st.success(f"✅ Found {budget_data['total_budgets']} active budget(s) in your AWS account")
+                
+                # Summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric(
+                        "Total Budget",
+                        f"${budget_data['total_limit']:,.2f}",
+                        delta=None
+                    )
+                
+                with col2:
+                    st.metric(
+                        "Actual Spend",
+                        f"${budget_data['total_actual']:,.2f}",
+                        delta=f"{budget_data['overall_utilization']:.1f}% used"
+                    )
+                
+                with col3:
+                    st.metric(
+                        "Forecasted",
+                        f"${budget_data['total_forecasted']:,.2f}",
+                        delta=None
+                    )
+                
+                with col4:
+                    # Status based on utilization
+                    if budget_data['budgets_exceeded'] > 0:
+                        status_label = "EXCEEDED"
+                        status_color = "🔴"
+                    elif budget_data['budgets_warning'] > 0:
+                        status_label = "WARNING"
+                        status_color = "🟡"
+                    else:
+                        status_label = "ON TRACK"
+                        status_color = "🟢"
+                    
+                    st.metric(
+                        "Status",
+                        f"{status_color} {status_label}",
+                        delta=None
+                    )
+                
+                st.markdown("---")
+                
+                # Budget details table
+                st.markdown("#### 💼 Budget Details")
+                
+                budget_list = []
+                for budget in budget_data.get('budgets', []):
+                    status_emoji = {
+                        'EXCEEDED': '🔴',
+                        'WARNING': '🟡',
+                        'FORECASTED_EXCEED': '🟠',
+                        'OK': '🟢'
+                    }.get(budget['status'], '⚪')
+                    
+                    budget_list.append({
+                        'Budget Name': budget['name'],
+                        'Type': budget['type'],
+                        'Limit': f"${budget['limit_amount']:,.2f}",
+                        'Actual': f"${budget['actual_amount']:,.2f}",
+                        'Forecast': f"${budget['forecasted_amount']:,.2f}",
+                        'Utilization': f"{budget['utilization']:.1f}%",
+                        'Status': f"{status_emoji} {budget['status']}"
+                    })
+                
+                if budget_list:
+                    budget_df = pd.DataFrame(budget_list)
+                    st.dataframe(budget_df, use_container_width=True, hide_index=True)
+                    
+                    # Visualization
+                    st.markdown("#### 📊 Budget Utilization")
+                    
+                    # Create visualization data
+                    viz_data = []
+                    for budget in budget_data.get('budgets', []):
+                        viz_data.append({
+                            'Budget': budget['name'],
+                            'Actual': budget['actual_amount'],
+                            'Forecast': budget['forecasted_amount'],
+                            'Limit': budget['limit_amount']
+                        })
+                    
+                    if viz_data:
+                        viz_df = pd.DataFrame(viz_data)
+                        
+                        import plotly.graph_objects as go
+                        
+                        fig = go.Figure()
+                        
+                        fig.add_trace(go.Bar(
+                            name='Actual',
+                            x=viz_df['Budget'],
+                            y=viz_df['Actual'],
+                            marker_color='lightblue'
+                        ))
+                        
+                        fig.add_trace(go.Bar(
+                            name='Forecast',
+                            x=viz_df['Budget'],
+                            y=viz_df['Forecast'],
+                            marker_color='orange'
+                        ))
+                        
+                        fig.add_trace(go.Scatter(
+                            name='Limit',
+                            x=viz_df['Budget'],
+                            y=viz_df['Limit'],
+                            mode='markers+lines',
+                            marker=dict(size=10, color='red'),
+                            line=dict(color='red', width=2, dash='dash')
+                        ))
+                        
+                        fig.update_layout(
+                            title='Budget vs Actual vs Forecast',
+                            xaxis_title='Budget Name',
+                            yaxis_title='Amount ($)',
+                            barmode='group',
+                            height=400
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                
+            except Exception as e:
+                st.warning(f"⚠️ Could not fetch budget data: {str(e)}")
                 st.info("""
-                **Budget Best Practices:**
+                💡 To enable budgets, ensure you have:
+                - budgets:ViewBudget permissions
+                - budgets:DescribeBudgets permissions
                 
-                💰 Set budgets 10-15% above expected
-                📧 Alert at 80%, 90%, 100%
-                🔔 Use SNS for team notifications
-                🎯 Create budgets per environment
-                📊 Review and adjust monthly
-                """)
-            
-            with col2:
-                st.success("""
-                **Budget Types:**
-                
-                💵 **Cost Budget** - Dollar amount
-                📊 **Usage Budget** - Hours, GB, etc.
-                💳 **RI Budget** - Reservation utilization
-                🎯 **Savings Plans** - Commitment coverage
+                Run the setup script: setup-aws-budgets.ps1
                 """)
             
             return
