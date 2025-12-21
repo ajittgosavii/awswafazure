@@ -632,24 +632,32 @@ def get_cost_data(account_mgr=None) -> Dict:
             # Get daily trend
             trend_result = ce_service.get_cost_trend(days=30)
             
+            # Get cost by account (for Organizations)
+            account_result = ce_service.get_cost_by_account(days=30)
+            
             # Extract data safely
             total_cost = service_result.get('total', 0) if service_result.get('success') else 0
             services = service_result.get('costs', {}) if service_result.get('success') else {}
             daily_costs = trend_result.get('daily_costs', []) if trend_result.get('success') else []
+            by_account = account_result.get('costs', {}) if account_result.get('success') else {}
             
             # Build response
             cost_data = {
                 'total_cost': total_cost,
                 'services': services,
                 'daily_costs': daily_costs,
-                'by_account': {},  # Would need multi-account cost data - not available via standard API
+                'by_account': by_account,
                 'source': 'aws_cost_explorer',
-                'last_updated': datetime.now().isoformat()
+                'last_updated': datetime.now().isoformat(),
+                'account_count': account_result.get('account_count', 0) if account_result.get('success') else 0
             }
             
             # Show appropriate feedback
             if total_cost > 0:
-                st.success(f"✅ Successfully fetched real AWS Cost Explorer data - Total: {Helpers.format_currency(total_cost)}")
+                if cost_data.get('account_count', 0) > 1:
+                    st.success(f"✅ Successfully fetched real AWS Cost Explorer data - Total: {Helpers.format_currency(total_cost)} across {cost_data['account_count']} accounts")
+                else:
+                    st.success(f"✅ Successfully fetched real AWS Cost Explorer data - Total: {Helpers.format_currency(total_cost)}")
             elif not service_result.get('success') or not trend_result.get('success'):
                 # API calls failed
                 error_msg = service_result.get('error') or trend_result.get('error', 'Unknown error')
@@ -1500,17 +1508,54 @@ class FinOpsEnterpriseModule:
         
         # Check if we have multi-account data
         if not cost_data.get('by_account') or len(cost_data['by_account']) == 0:
-            st.info("💡 Multi-account cost breakdown not available")
-            st.markdown("**Why you're seeing this:**")
-            st.markdown("- In **Live Mode**: AWS Cost Explorer API doesn't provide account-level breakdown by default")
-            st.markdown("- In **Demo Mode**: Multi-account data should be available - try refreshing")
+            demo_mgr = DemoModeManager()
             
-            st.markdown("---")
-            st.markdown("**To get multi-account costs in Live Mode:**")
-            st.markdown("1. Use AWS Cost Explorer's **Linked Account** dimension")
-            st.markdown("2. Configure Organizations API access")
-            st.markdown("3. Use AWS Cost and Usage Reports (CUR) with Athena")
+            if demo_mgr.is_demo_mode:
+                st.info("💡 Multi-account cost breakdown not available in demo mode")
+            else:
+                st.warning("### ⚠️ Multi-Account Cost Breakdown Not Available")
+                
+                st.markdown("""
+                **No linked account cost data found.**
+                
+                ### 🔍 Possible Reasons:
+                
+                1. **Not using AWS Organizations**
+                   - You need AWS Organizations with linked accounts
+                   - Management account must be connected
+                
+                2. **Not connected to Management Account**
+                   - Connect using your **management/payer account** credentials
+                   - This is the account that consolidates billing
+                
+                3. **No costs in linked accounts**
+                   - Linked accounts may have $0 spend
+                
+                4. **Permission issue**
+                   - Need `organizations:ListAccounts` permission
+                   - Need `ce:GetCostAndUsage` with LINKED_ACCOUNT dimension
+                
+                ### 🚀 How to Enable:
+                
+                **If you have AWS Organizations:**
+                1. Go to AWS Console → Organizations
+                2. Note your **Management Account ID**
+                3. In this platform, connect using Management Account credentials
+                4. Cost breakdown will appear automatically
+                
+                ### 💡 Current Setup:
+                - Total Cost: {total}
+                - Source: Single account view
+                
+                Switch to your Management Account to see breakdown across all linked accounts.
+                """.format(total=Helpers.format_currency(cost_data.get('total_cost', 0))))
+            
             return
+        
+        # We have multi-account data - render it!
+        account_count = cost_data.get('account_count', len(cost_data['by_account']))
+        
+        st.success(f"✅ Showing costs across **{account_count} AWS accounts** in your organization")
         
         # Create list of account data
         account_data = [
