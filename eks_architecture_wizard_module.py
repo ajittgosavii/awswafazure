@@ -44,144 +44,333 @@ class EKSSVGDiagramGenerator:
         
         az_count = len(azs)
         
-        # Generate HTML-based diagram that renders properly in Streamlit
-        html = f'''
-<div style="background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); padding: 20px; border-radius: 12px; font-family: 'Segoe UI', Arial, sans-serif;">
-    
-    <!-- Header -->
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: #232F3E; margin: 0;">🏗️ EKS Architecture: {project_name}</h2>
-        <p style="color: #666; margin: 5px 0;">Region: {region} | AZs: {az_count} | Environment: {environment.title()}</p>
-    </div>
-    
-    <!-- AWS Cloud Container -->
-    <div style="border: 3px dashed #FF9900; border-radius: 12px; padding: 15px; background: white;">
-        <div style="background: #FF9900; color: white; padding: 5px 15px; border-radius: 4px; display: inline-block; font-weight: bold; margin-bottom: 15px;">
-            ☁️ AWS Cloud
+        # Generate complete HTML document for iframe rendering
+        html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+        }}
+        .container {{
+            max-width: 100%;
+        }}
+        .header {{
+            text-align: center;
+            margin-bottom: 15px;
+        }}
+        .header h2 {{
+            color: #232F3E;
+            margin: 0;
+            font-size: 20px;
+        }}
+        .header p {{
+            color: #666;
+            margin: 5px 0;
+            font-size: 13px;
+        }}
+        .aws-cloud {{
+            border: 3px dashed #FF9900;
+            border-radius: 12px;
+            padding: 12px;
+            background: white;
+        }}
+        .aws-badge {{
+            background: #FF9900;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 4px;
+            display: inline-block;
+            font-weight: bold;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }}
+        .vpc {{
+            border: 2px solid #147EB4;
+            border-radius: 8px;
+            padding: 12px;
+            background: linear-gradient(180deg, #E8F4FD 0%, #D4E8F7 100%);
+        }}
+        .vpc-badge {{
+            background: #147EB4;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            font-weight: bold;
+            margin-bottom: 12px;
+            font-size: 12px;
+        }}
+        .az-container {{
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }}
+        .az {{
+            flex: 1;
+            min-width: 200px;
+            max-width: 280px;
+            border: 2px solid #5C6BC0;
+            border-radius: 8px;
+            background: white;
+            overflow: hidden;
+        }}
+        .az-header {{
+            background: #5C6BC0;
+            color: white;
+            padding: 6px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 13px;
+        }}
+        .private-subnet {{
+            margin: 8px;
+            padding: 8px;
+            background: #E8F5E9;
+            border: 1px solid #4CAF50;
+            border-radius: 6px;
+        }}
+        .subnet-label {{
+            font-weight: bold;
+            font-size: 11px;
+            margin-bottom: 6px;
+        }}
+        .private-label {{ color: #2E7D32; }}
+        .public-label {{ color: #E65100; }}
+        .node {{
+            border-radius: 5px;
+            padding: 8px;
+            margin-bottom: 6px;
+            border: 1px solid #333;
+        }}
+        .node-ondemand {{ background: #64B5F6; }}
+        .node-spot {{ background: #FFB74D; }}
+        .node-title {{
+            font-weight: bold;
+            font-size: 10px;
+        }}
+        .node-type {{
+            font-size: 9px;
+            color: #555;
+        }}
+        .node-capacity {{
+            font-size: 8px;
+            color: #777;
+        }}
+        .public-subnet {{
+            margin: 8px;
+            padding: 8px;
+            background: #FFF3E0;
+            border: 1px solid #FF9800;
+            border-radius: 6px;
+        }}
+        .nat-gw {{
+            background: #81C784;
+            color: white;
+            border-radius: 4px;
+            padding: 5px;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+        }}
+        .control-plane {{
+            margin-top: 15px;
+            text-align: center;
+        }}
+        .control-plane-box {{
+            display: inline-block;
+            background: linear-gradient(135deg, #326CE5 0%, #1E4DB7 100%);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 8px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+        }}
+        .control-plane-title {{
+            font-weight: bold;
+            font-size: 14px;
+        }}
+        .control-plane-desc {{
+            font-size: 10px;
+            opacity: 0.9;
+        }}
+        .igw {{
+            text-align: center;
+            margin-top: 12px;
+        }}
+        .igw-box {{
+            display: inline-block;
+            background: linear-gradient(135deg, #FF9900 0%, #FF6600 100%);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+        }}
+        .users {{
+            text-align: center;
+            margin-top: 12px;
+        }}
+        .users-box {{
+            display: inline-block;
+            background: #E3F2FD;
+            border: 2px solid #1976D2;
+            padding: 8px 20px;
+            border-radius: 20px;
+            color: #1565C0;
+            font-weight: bold;
+            font-size: 12px;
+        }}
+        .addons {{
+            margin-top: 12px;
+            background: #F3E5F5;
+            border: 1px solid #7B1FA2;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 11px;
+        }}
+        .addons-label {{
+            color: #7B1FA2;
+            font-weight: bold;
+        }}
+        .legend {{
+            margin-top: 12px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }}
+        .legend-item {{
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+        }}
+        .legend-color {{
+            width: 16px;
+            height: 12px;
+            border-radius: 2px;
+        }}
+        .scaling-note {{
+            text-align: center;
+            font-size: 9px;
+            color: #666;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>🏗️ EKS Architecture: {project_name}</h2>
+            <p>Region: {region} | AZs: {az_count} | Environment: {environment.title()}</p>
         </div>
         
-        <!-- VPC Container -->
-        <div style="border: 2px solid #147EB4; border-radius: 8px; padding: 15px; background: linear-gradient(180deg, #E8F4FD 0%, #D4E8F7 100%);">
-            <div style="background: #147EB4; color: white; padding: 4px 12px; border-radius: 4px; display: inline-block; font-weight: bold; margin-bottom: 15px;">
-                🌐 VPC (10.0.0.0/16)
-            </div>
+        <div class="aws-cloud">
+            <div class="aws-badge">☁️ AWS Cloud</div>
             
-            <!-- Availability Zones -->
-            <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
+            <div class="vpc">
+                <div class="vpc-badge">🌐 VPC (10.0.0.0/16)</div>
+                
+                <div class="az-container">
 '''
         
         # Add each AZ
         for i, az in enumerate(azs):
             az_name = az.split('-')[-1].upper() if '-' in az else az.upper()
             
-            # Get node info for this AZ
+            # Get node info
             ng = node_groups[0] if node_groups else {}
             instance_type = ng.get('instance_type', 'm6i.large')
             capacity_type = ng.get('capacity_type', 'ON_DEMAND')
-            node_color = '#FFB74D' if capacity_type == 'SPOT' else '#64B5F6'
+            node_class = 'node-spot' if capacity_type == 'SPOT' else 'node-ondemand'
             node_label = '🏷️ Spot' if capacity_type == 'SPOT' else '📦 On-Demand'
             min_nodes = ng.get('min_size', 3)
             
             html += f'''
-                <!-- AZ {i+1} -->
-                <div style="flex: 1; min-width: 280px; max-width: 350px; border: 2px solid #5C6BC0; border-radius: 8px; background: white; overflow: hidden;">
-                    <div style="background: #5C6BC0; color: white; padding: 8px; text-align: center; font-weight: bold;">
-                        📍 {az_name}
-                    </div>
-                    
-                    <!-- Private Subnet -->
-                    <div style="margin: 10px; padding: 10px; background: #E8F5E9; border: 1px solid #4CAF50; border-radius: 6px;">
-                        <div style="color: #2E7D32; font-weight: bold; font-size: 12px; margin-bottom: 8px;">🔒 Private Subnet</div>
+                    <div class="az">
+                        <div class="az-header">📍 {az_name}</div>
                         
-                        <!-- Worker Nodes -->
-                        <div style="background: {node_color}; border-radius: 6px; padding: 10px; margin-bottom: 8px; border: 1px solid #333;">
-                            <div style="font-weight: bold; font-size: 11px;">💻 Worker Node</div>
-                            <div style="font-size: 10px; color: #555;">{instance_type}</div>
-                            <div style="font-size: 9px; color: #777;">{node_label}</div>
-                        </div>
-                        
-                        <div style="background: {node_color}; border-radius: 6px; padding: 10px; margin-bottom: 8px; border: 1px solid #333;">
-                            <div style="font-weight: bold; font-size: 11px;">💻 Worker Node</div>
-                            <div style="font-size: 10px; color: #555;">{instance_type}</div>
+                        <div class="private-subnet">
+                            <div class="subnet-label private-label">🔒 Private Subnet</div>
+                            
+                            <div class="node {node_class}">
+                                <div class="node-title">💻 Worker Node</div>
+                                <div class="node-type">{instance_type}</div>
+                                <div class="node-capacity">{node_label}</div>
+                            </div>
+                            
+                            <div class="node {node_class}">
+                                <div class="node-title">💻 Worker Node</div>
+                                <div class="node-type">{instance_type}</div>
+                            </div>
+                            
+                            <div class="scaling-note">... {min_nodes}+ nodes (auto-scaling)</div>
                         </div>
                         
-                        <div style="text-align: center; font-size: 10px; color: #666;">
-                            ... {min_nodes}+ nodes (auto-scaling)
+                        <div class="public-subnet">
+                            <div class="subnet-label public-label">🌍 Public Subnet</div>
+                            <div class="nat-gw">🔀 NAT Gateway</div>
                         </div>
                     </div>
-                    
-                    <!-- Public Subnet -->
-                    <div style="margin: 10px; padding: 10px; background: #FFF3E0; border: 1px solid #FF9800; border-radius: 6px;">
-                        <div style="color: #E65100; font-weight: bold; font-size: 12px; margin-bottom: 8px;">🌍 Public Subnet</div>
-                        <div style="background: #81C784; color: white; border-radius: 4px; padding: 6px; text-align: center; font-size: 11px; font-weight: bold;">
-                            🔀 NAT Gateway
-                        </div>
-                    </div>
-                </div>
 '''
         
         html += '''
+                </div>
+                
+                <div class="control-plane">
+                    <div class="control-plane-box">
+                        <div class="control-plane-title">☸️ EKS Control Plane</div>
+                        <div class="control-plane-desc">API Server | etcd | Scheduler | Controller</div>
+                    </div>
+                </div>
             </div>
             
-            <!-- EKS Control Plane -->
-            <div style="margin-top: 20px; text-align: center;">
-                <div style="display: inline-block; background: linear-gradient(135deg, #326CE5 0%, #1E4DB7 100%); color: white; padding: 15px 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-                    <div style="font-weight: bold; font-size: 16px;">☸️ EKS Control Plane</div>
-                    <div style="font-size: 11px; opacity: 0.9;">Kubernetes API Server | etcd | Scheduler | Controller Manager</div>
-                </div>
+            <div class="igw">
+                <div class="igw-box">🌐 Internet Gateway</div>
             </div>
         </div>
         
-        <!-- Internet Gateway -->
-        <div style="text-align: center; margin-top: 15px;">
-            <div style="display: inline-block; background: linear-gradient(135deg, #FF9900 0%, #FF6600 100%); color: white; padding: 10px 30px; border-radius: 6px; font-weight: bold;">
-                🌐 Internet Gateway
-            </div>
+        <div class="users">
+            <div class="users-box">👥 Users / Internet</div>
         </div>
-    </div>
-    
-    <!-- Users/Internet -->
-    <div style="text-align: center; margin-top: 15px;">
-        <div style="display: inline-block; background: #E3F2FD; border: 2px solid #1976D2; padding: 10px 30px; border-radius: 20px; color: #1565C0; font-weight: bold;">
-            👥 Users / Internet
-        </div>
-    </div>
 '''
         
         # Add Add-ons section
         if addons:
             addon_list = ', '.join(addons[:6])
             html += f'''
-    <!-- Add-ons -->
-    <div style="margin-top: 15px; background: #F3E5F5; border: 1px solid #7B1FA2; border-radius: 6px; padding: 10px;">
-        <span style="color: #7B1FA2; font-weight: bold;">🔌 Add-ons:</span>
-        <span style="color: #555;">{addon_list}</span>
-    </div>
+        <div class="addons">
+            <span class="addons-label">🔌 Add-ons:</span>
+            <span>{addon_list}</span>
+        </div>
 '''
         
         # Legend
         html += '''
-    <!-- Legend -->
-    <div style="margin-top: 15px; display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-        <div style="display: flex; align-items: center; gap: 5px;">
-            <div style="width: 20px; height: 15px; background: #64B5F6; border-radius: 3px;"></div>
-            <span style="font-size: 11px;">On-Demand Nodes</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 5px;">
-            <div style="width: 20px; height: 15px; background: #FFB74D; border-radius: 3px;"></div>
-            <span style="font-size: 11px;">Spot Nodes</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 5px;">
-            <div style="width: 20px; height: 15px; background: #E8F5E9; border: 1px solid #4CAF50; border-radius: 3px;"></div>
-            <span style="font-size: 11px;">Private Subnet</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 5px;">
-            <div style="width: 20px; height: 15px; background: #FFF3E0; border: 1px solid #FF9800; border-radius: 3px;"></div>
-            <span style="font-size: 11px;">Public Subnet</span>
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #64B5F6;"></div>
+                <span>On-Demand</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFB74D;"></div>
+                <span>Spot</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #E8F5E9; border: 1px solid #4CAF50;"></div>
+                <span>Private</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFF3E0; border: 1px solid #FF9800;"></div>
+                <span>Public</span>
+            </div>
         </div>
     </div>
-</div>
-'''
+</body>
+</html>'''
         return html
     
     @staticmethod
@@ -1448,14 +1637,19 @@ class EKSModernizationModuleRevamped:
         # Generate HTML diagram
         diagram_html = EKSSVGDiagramGenerator.generate_cluster_diagram(config)
         
-        # Display the diagram
+        # Display the diagram using st.components.v1.html (properly renders HTML)
         st.markdown("#### Your EKS Architecture")
-        st.markdown(diagram_html, unsafe_allow_html=True)
         
-        # Download button
-        st.markdown(
-            EKSSVGDiagramGenerator.get_svg_download_link(diagram_html, f"{config['project_name']}_architecture.html"),
-            unsafe_allow_html=True
+        # Use components.html to render the HTML properly
+        import streamlit.components.v1 as components
+        components.html(diagram_html, height=750, scrolling=True)
+        
+        # Download button using Streamlit native
+        st.download_button(
+            label="📥 Download Architecture Diagram",
+            data=diagram_html,
+            file_name=f"{config['project_name']}_architecture.html",
+            mime="text/html"
         )
         
         # Architecture summary
