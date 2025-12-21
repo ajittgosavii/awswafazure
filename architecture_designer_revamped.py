@@ -618,11 +618,1099 @@ class ArchitectureDiagramGenerator:
 </html>'''
         
         return html
-
-
-# ============================================================================
-# MAIN MODULE CLASS
-# ============================================================================
+    
+    @staticmethod
+    def generate_hld(services: List[str], title: str, config: Dict) -> str:
+        """Generate High-Level Design (HLD) diagram - simplified architecture view"""
+        
+        # Determine architecture tiers based on services
+        has_cdn = any(s in services for s in ['cloudfront', 'route53'])
+        has_security = any(s in services for s in ['waf', 'shield', 'cognito'])
+        has_lb = any(s in services for s in ['alb', 'nlb', 'api_gateway'])
+        has_compute = any(s in services for s in ['ec2', 'ecs', 'eks', 'lambda', 'fargate'])
+        has_cache = 'elasticache' in services
+        has_db = any(s in services for s in ['rds', 'aurora', 'dynamodb'])
+        has_storage = any(s in services for s in ['s3', 'efs'])
+        has_messaging = any(s in services for s in ['sqs', 'sns', 'eventbridge'])
+        
+        scale = config.get('scale', 'medium')
+        compliance = config.get('compliance', [])
+        industry = config.get('industry', '')
+        
+        html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }}
+        .container {{ max-width: 1200px; margin: 0 auto; }}
+        
+        .header {{
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }}
+        .header h1 {{ font-size: 24px; margin-bottom: 8px; }}
+        .header .meta {{ font-size: 12px; opacity: 0.8; }}
+        .header .badges {{ margin-top: 10px; }}
+        .header .badge {{
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            margin: 3px;
+        }}
+        .badge-scale {{ background: #4CAF50; }}
+        .badge-compliance {{ background: #FF9800; }}
+        .badge-industry {{ background: #9C27B0; }}
+        
+        .architecture {{
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }}
+        
+        .tier {{
+            background: white;
+            border-radius: 12px;
+            padding: 15px 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }}
+        .tier-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }}
+        .tier-title {{
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+        }}
+        .tier-badge {{
+            background: #e3f2fd;
+            color: #1976D2;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+        }}
+        
+        .tier-content {{
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }}
+        
+        .component {{
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 15px 25px;
+            text-align: center;
+            min-width: 120px;
+            transition: all 0.3s ease;
+        }}
+        .component:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }}
+        .component-icon {{ font-size: 32px; margin-bottom: 8px; }}
+        .component-name {{ font-size: 12px; font-weight: 600; color: #333; }}
+        .component-desc {{ font-size: 10px; color: #666; margin-top: 4px; }}
+        
+        .component.edge {{ border-color: #8C4FFF; background: #f3e5f5; }}
+        .component.security {{ border-color: #DD344C; background: #ffebee; }}
+        .component.compute {{ border-color: #ED7100; background: #fff3e0; }}
+        .component.data {{ border-color: #3B48CC; background: #e8eaf6; }}
+        .component.storage {{ border-color: #3F8624; background: #e8f5e9; }}
+        
+        .flow-arrow {{
+            text-align: center;
+            font-size: 24px;
+            color: #666;
+            padding: 5px 0;
+        }}
+        
+        .info-panel {{
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            color: white;
+        }}
+        .info-grid {{
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }}
+        .info-item {{
+            text-align: center;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+        }}
+        .info-value {{ font-size: 20px; font-weight: bold; }}
+        .info-label {{ font-size: 10px; opacity: 0.8; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 {title} - High-Level Design</h1>
+            <div class="meta">AWS Well-Architected Framework Aligned</div>
+            <div class="badges">
+                <span class="badge badge-scale">Scale: {scale.title()}</span>
+                {"".join(f'<span class="badge badge-compliance">{c}</span>' for c in compliance[:3])}
+                {f'<span class="badge badge-industry">{industry.replace("_", " ").title()}</span>' if industry else ''}
+            </div>
+        </div>
+        
+        <div class="architecture">
+'''
+        
+        # Users/Internet tier
+        html += '''
+            <div class="tier">
+                <div class="tier-header">
+                    <span class="tier-title">🌐 Users / Internet</span>
+                    <span class="tier-badge">Public Access</span>
+                </div>
+                <div class="tier-content">
+                    <div class="component edge">
+                        <div class="component-icon">👥</div>
+                        <div class="component-name">End Users</div>
+                        <div class="component-desc">Web & Mobile</div>
+                    </div>
+                </div>
+            </div>
+            <div class="flow-arrow">⬇️</div>
+'''
+        
+        # Edge/CDN tier
+        if has_cdn:
+            html += '''
+            <div class="tier">
+                <div class="tier-header">
+                    <span class="tier-title">🌍 Edge / CDN Layer</span>
+                    <span class="tier-badge">Global Distribution</span>
+                </div>
+                <div class="tier-content">
+'''
+            if 'route53' in services:
+                html += '''
+                    <div class="component edge">
+                        <div class="component-icon">🌐</div>
+                        <div class="component-name">Route 53</div>
+                        <div class="component-desc">DNS & Routing</div>
+                    </div>
+'''
+            if 'cloudfront' in services:
+                html += '''
+                    <div class="component edge">
+                        <div class="component-icon">🌍</div>
+                        <div class="component-name">CloudFront</div>
+                        <div class="component-desc">CDN</div>
+                    </div>
+'''
+            html += '''
+                </div>
+            </div>
+            <div class="flow-arrow">⬇️</div>
+'''
+        
+        # Security tier
+        if has_security:
+            html += '''
+            <div class="tier">
+                <div class="tier-header">
+                    <span class="tier-title">🔒 Security Layer</span>
+                    <span class="tier-badge">Protection & Identity</span>
+                </div>
+                <div class="tier-content">
+'''
+            if 'waf' in services:
+                html += '''
+                    <div class="component security">
+                        <div class="component-icon">🛡️</div>
+                        <div class="component-name">WAF</div>
+                        <div class="component-desc">Web Firewall</div>
+                    </div>
+'''
+            if 'shield' in services:
+                html += '''
+                    <div class="component security">
+                        <div class="component-icon">🔰</div>
+                        <div class="component-name">Shield</div>
+                        <div class="component-desc">DDoS Protection</div>
+                    </div>
+'''
+            if 'cognito' in services:
+                html += '''
+                    <div class="component security">
+                        <div class="component-icon">👤</div>
+                        <div class="component-name">Cognito</div>
+                        <div class="component-desc">Identity</div>
+                    </div>
+'''
+            html += '''
+                </div>
+            </div>
+            <div class="flow-arrow">⬇️</div>
+'''
+        
+        # Load Balancing tier
+        if has_lb:
+            html += '''
+            <div class="tier">
+                <div class="tier-header">
+                    <span class="tier-title">⚖️ Load Balancing / API Layer</span>
+                    <span class="tier-badge">Traffic Distribution</span>
+                </div>
+                <div class="tier-content">
+'''
+            if 'alb' in services:
+                html += '''
+                    <div class="component edge">
+                        <div class="component-icon">⚖️</div>
+                        <div class="component-name">ALB</div>
+                        <div class="component-desc">Application LB</div>
+                    </div>
+'''
+            if 'api_gateway' in services:
+                html += '''
+                    <div class="component edge">
+                        <div class="component-icon">🔌</div>
+                        <div class="component-name">API Gateway</div>
+                        <div class="component-desc">REST/WebSocket</div>
+                    </div>
+'''
+            html += '''
+                </div>
+            </div>
+            <div class="flow-arrow">⬇️</div>
+'''
+        
+        # Compute tier
+        if has_compute:
+            html += '''
+            <div class="tier">
+                <div class="tier-header">
+                    <span class="tier-title">💻 Compute Layer</span>
+                    <span class="tier-badge">Application Processing</span>
+                </div>
+                <div class="tier-content">
+'''
+            if 'ec2' in services:
+                html += '''
+                    <div class="component compute">
+                        <div class="component-icon">💻</div>
+                        <div class="component-name">EC2</div>
+                        <div class="component-desc">Virtual Servers</div>
+                    </div>
+'''
+            if 'ecs' in services or 'fargate' in services:
+                html += '''
+                    <div class="component compute">
+                        <div class="component-icon">🐳</div>
+                        <div class="component-name">ECS/Fargate</div>
+                        <div class="component-desc">Containers</div>
+                    </div>
+'''
+            if 'eks' in services:
+                html += '''
+                    <div class="component compute">
+                        <div class="component-icon">☸️</div>
+                        <div class="component-name">EKS</div>
+                        <div class="component-desc">Kubernetes</div>
+                    </div>
+'''
+            if 'lambda' in services:
+                html += '''
+                    <div class="component compute">
+                        <div class="component-icon">⚡</div>
+                        <div class="component-name">Lambda</div>
+                        <div class="component-desc">Serverless</div>
+                    </div>
+'''
+            html += '''
+                </div>
+            </div>
+            <div class="flow-arrow">⬇️</div>
+'''
+        
+        # Cache tier
+        if has_cache:
+            html += '''
+            <div class="tier">
+                <div class="tier-header">
+                    <span class="tier-title">⚡ Cache Layer</span>
+                    <span class="tier-badge">Performance</span>
+                </div>
+                <div class="tier-content">
+                    <div class="component data">
+                        <div class="component-icon">⚡</div>
+                        <div class="component-name">ElastiCache</div>
+                        <div class="component-desc">Redis/Memcached</div>
+                    </div>
+                </div>
+            </div>
+            <div class="flow-arrow">⬇️</div>
+'''
+        
+        # Database tier
+        if has_db:
+            html += '''
+            <div class="tier">
+                <div class="tier-header">
+                    <span class="tier-title">🗄️ Database Layer</span>
+                    <span class="tier-badge">Data Persistence</span>
+                </div>
+                <div class="tier-content">
+'''
+            if 'aurora' in services:
+                html += '''
+                    <div class="component data">
+                        <div class="component-icon">🌟</div>
+                        <div class="component-name">Aurora</div>
+                        <div class="component-desc">MySQL/PostgreSQL</div>
+                    </div>
+'''
+            elif 'rds' in services:
+                html += '''
+                    <div class="component data">
+                        <div class="component-icon">🗄️</div>
+                        <div class="component-name">RDS</div>
+                        <div class="component-desc">Relational DB</div>
+                    </div>
+'''
+            if 'dynamodb' in services:
+                html += '''
+                    <div class="component data">
+                        <div class="component-icon">📊</div>
+                        <div class="component-name">DynamoDB</div>
+                        <div class="component-desc">NoSQL</div>
+                    </div>
+'''
+            html += '''
+                </div>
+            </div>
+'''
+        
+        # Storage tier
+        if has_storage:
+            html += '''
+            <div class="flow-arrow">⬇️</div>
+            <div class="tier">
+                <div class="tier-header">
+                    <span class="tier-title">📦 Storage Layer</span>
+                    <span class="tier-badge">Object & File Storage</span>
+                </div>
+                <div class="tier-content">
+'''
+            if 's3' in services:
+                html += '''
+                    <div class="component storage">
+                        <div class="component-icon">📦</div>
+                        <div class="component-name">S3</div>
+                        <div class="component-desc">Object Storage</div>
+                    </div>
+'''
+            if 'efs' in services:
+                html += '''
+                    <div class="component storage">
+                        <div class="component-icon">📁</div>
+                        <div class="component-name">EFS</div>
+                        <div class="component-desc">File System</div>
+                    </div>
+'''
+            html += '''
+                </div>
+            </div>
+'''
+        
+        # Info panel
+        html += f'''
+        </div>
+        
+        <div class="info-panel">
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-value">{len(services)}</div>
+                    <div class="info-label">AWS Services</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-value">{len([s for s in services if s in ['waf', 'shield', 'kms', 'guardduty', 'cognito', 'secrets_manager', 'security_hub']])}</div>
+                    <div class="info-label">Security Services</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-value">{len(compliance)}</div>
+                    <div class="info-label">Compliance Frameworks</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-value">{scale.title()}</div>
+                    <div class="info-label">Scale Tier</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>'''
+        
+        return html
+    
+    @staticmethod
+    def generate_lld(services: List[str], title: str, config: Dict) -> str:
+        """Generate Low-Level Design (LLD) diagram - comprehensive architecture view"""
+        
+        scale = config.get('scale', 'medium')
+        compliance = config.get('compliance', [])
+        industry = config.get('industry', '')
+        region = config.get('region', 'us-east-1')
+        budget = config.get('monthly_budget', 5000)
+        
+        # Categorize services
+        edge_services = [s for s in services if s in ['route53', 'cloudfront', 'global_accelerator']]
+        security_services = [s for s in services if s in ['waf', 'shield', 'cognito', 'kms', 'secrets_manager', 'guardduty', 'security_hub', 'macie', 'inspector', 'iam']]
+        network_services = [s for s in services if s in ['vpc', 'alb', 'nlb', 'api_gateway', 'direct_connect']]
+        compute_services = [s for s in services if s in ['ec2', 'ecs', 'eks', 'lambda', 'fargate', 'auto_scaling']]
+        data_services = [s for s in services if s in ['rds', 'aurora', 'dynamodb', 'elasticache', 'rds_proxy', 'redshift']]
+        storage_services = [s for s in services if s in ['s3', 'efs', 'ebs', 'backup']]
+        integration_services = [s for s in services if s in ['sqs', 'sns', 'eventbridge', 'kinesis', 'step_functions']]
+        monitoring_services = [s for s in services if s in ['cloudwatch', 'cloudtrail', 'config', 'xray']]
+        analytics_services = [s for s in services if s in ['athena', 'glue', 'sagemaker', 'redshift']]
+        
+        html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 50%, #415a77 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }}
+        .container {{ max-width: 1400px; margin: 0 auto; }}
+        
+        .header {{
+            background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 30px rgba(255,107,53,0.3);
+        }}
+        .header h1 {{ font-size: 26px; margin-bottom: 8px; }}
+        .header .subtitle {{ font-size: 13px; opacity: 0.9; }}
+        .header-badges {{
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }}
+        .header-badge {{
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 11px;
+        }}
+        
+        .lld-grid {{
+            display: grid;
+            grid-template-columns: 1fr 3fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }}
+        
+        .sidebar {{
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }}
+        
+        .main-architecture {{
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        }}
+        
+        .section {{
+            background: rgba(255,255,255,0.95);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }}
+        .section.security {{ border-left: 4px solid #DD344C; }}
+        .section.monitoring {{ border-left: 4px solid #E7157B; }}
+        .section.compliance {{ border-left: 4px solid #9C27B0; }}
+        .section.integration {{ border-left: 4px solid #00BCD4; }}
+        
+        .section-title {{
+            font-size: 12px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        
+        .services-grid {{
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }}
+        
+        .service-chip {{
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .service-chip.active {{ background: #e3f2fd; border-color: #2196F3; }}
+        .service-icon {{ font-size: 16px; }}
+        
+        .vpc-container {{
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border: 3px solid #4CAF50;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+        }}
+        .vpc-header {{
+            text-align: center;
+            margin-bottom: 15px;
+        }}
+        .vpc-title {{
+            font-size: 14px;
+            font-weight: bold;
+            color: #2E7D32;
+        }}
+        .vpc-cidr {{
+            font-size: 11px;
+            color: #558B2F;
+            font-family: monospace;
+        }}
+        
+        .az-container {{
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }}
+        .az {{
+            background: white;
+            border: 2px dashed #81C784;
+            border-radius: 10px;
+            padding: 12px;
+        }}
+        .az-title {{
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            color: #388E3C;
+            margin-bottom: 10px;
+        }}
+        
+        .subnet {{
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }}
+        .subnet.public {{
+            background: #fff3e0;
+            border: 1px solid #FF9800;
+        }}
+        .subnet.private {{
+            background: #e3f2fd;
+            border: 1px solid #2196F3;
+        }}
+        .subnet-title {{
+            font-size: 9px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }}
+        .subnet.public .subnet-title {{ color: #E65100; }}
+        .subnet.private .subnet-title {{ color: #1565C0; }}
+        
+        .resource {{
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 6px 8px;
+            margin: 4px 0;
+            font-size: 9px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }}
+        .resource-icon {{ font-size: 14px; }}
+        
+        .data-flow {{
+            background: #fce4ec;
+            border: 2px solid #E91E63;
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 15px;
+        }}
+        .data-flow-title {{
+            font-size: 11px;
+            font-weight: bold;
+            color: #C2185B;
+            margin-bottom: 10px;
+            text-align: center;
+        }}
+        .flow-row {{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0;
+            flex-wrap: wrap;
+        }}
+        .flow-item {{
+            background: white;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }}
+        .flow-arrow {{ color: #E91E63; font-weight: bold; }}
+        
+        .metrics-row {{
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }}
+        .metric {{
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            color: white;
+        }}
+        .metric-value {{ font-size: 22px; font-weight: bold; }}
+        .metric-label {{ font-size: 9px; opacity: 0.8; margin-top: 4px; }}
+        
+        .legend {{
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            flex-wrap: wrap;
+        }}
+        .legend-item {{
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            color: white;
+        }}
+        .legend-color {{
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📐 {title} - Low-Level Design</h1>
+            <div class="subtitle">Comprehensive Architecture with Networking, Security & Data Flows</div>
+            <div class="header-badges">
+                <span class="header-badge">📍 Region: {region}</span>
+                <span class="header-badge">📊 Scale: {scale.title()}</span>
+                <span class="header-badge">💰 Budget: ${budget:,}/mo</span>
+                <span class="header-badge">🔧 Services: {len(services)}</span>
+            </div>
+        </div>
+        
+        <div class="lld-grid">
+            <!-- Left Sidebar - Security & Monitoring -->
+            <div class="sidebar">
+                <div class="section security">
+                    <div class="section-title">🔒 Security Layer</div>
+                    <div class="services-grid">
+'''
+        
+        for svc in security_services:
+            info = ArchitectureDiagramGenerator.SERVICE_INFO.get(svc, {'name': svc, 'icon': '📦'})
+            html += f'''
+                        <div class="service-chip active">
+                            <span class="service-icon">{info['icon']}</span>
+                            <span>{info['name']}</span>
+                        </div>
+'''
+        
+        if not security_services:
+            html += '''
+                        <div class="service-chip">
+                            <span>No security services</span>
+                        </div>
+'''
+        
+        html += '''
+                    </div>
+                </div>
+                
+                <div class="section monitoring">
+                    <div class="section-title">📊 Observability</div>
+                    <div class="services-grid">
+'''
+        
+        for svc in monitoring_services:
+            info = ArchitectureDiagramGenerator.SERVICE_INFO.get(svc, {'name': svc, 'icon': '📦'})
+            html += f'''
+                        <div class="service-chip active">
+                            <span class="service-icon">{info['icon']}</span>
+                            <span>{info['name']}</span>
+                        </div>
+'''
+        
+        if not monitoring_services:
+            html += '''
+                        <div class="service-chip">
+                            <span>No monitoring</span>
+                        </div>
+'''
+        
+        html += f'''
+                    </div>
+                </div>
+                
+                <div class="section compliance">
+                    <div class="section-title">📋 Compliance</div>
+                    <div class="services-grid">
+'''
+        
+        for comp in compliance[:4]:
+            html += f'''
+                        <div class="service-chip active">
+                            <span class="service-icon">✅</span>
+                            <span>{comp}</span>
+                        </div>
+'''
+        
+        if not compliance:
+            html += '''
+                        <div class="service-chip">
+                            <span>No compliance requirements</span>
+                        </div>
+'''
+        
+        html += '''
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Architecture -->
+            <div class="main-architecture">
+'''
+        
+        # Edge Layer
+        if edge_services:
+            html += '''
+                <div style="background: #f3e5f5; border: 2px solid #9C27B0; border-radius: 10px; padding: 12px; margin-bottom: 15px;">
+                    <div style="text-align: center; font-size: 12px; font-weight: bold; color: #7B1FA2; margin-bottom: 10px;">🌐 Edge Layer (Global)</div>
+                    <div style="display: flex; justify-content: center; gap: 15px;">
+'''
+            for svc in edge_services:
+                info = ArchitectureDiagramGenerator.SERVICE_INFO.get(svc, {'name': svc, 'icon': '📦'})
+                html += f'''
+                        <div class="resource">
+                            <span class="resource-icon">{info['icon']}</span>
+                            <span>{info['name']}</span>
+                        </div>
+'''
+            html += '''
+                    </div>
+                </div>
+'''
+        
+        # VPC Container
+        html += '''
+                <div class="vpc-container">
+                    <div class="vpc-header">
+                        <div class="vpc-title">🌐 VPC - Production Environment</div>
+                        <div class="vpc-cidr">CIDR: 10.0.0.0/16</div>
+                    </div>
+                    
+                    <div class="az-container">
+'''
+        
+        # Generate 3 AZs
+        az_suffixes = ['a', 'b', 'c']
+        for i, suffix in enumerate(az_suffixes):
+            html += f'''
+                        <div class="az">
+                            <div class="az-title">AZ-{suffix.upper()} ({region}{suffix})</div>
+                            
+                            <div class="subnet public">
+                                <div class="subnet-title">Public Subnet (10.0.{i*10}.0/24)</div>
+'''
+            # Add public subnet resources
+            if 'alb' in services and i == 0:
+                html += '''
+                                <div class="resource"><span class="resource-icon">⚖️</span>ALB</div>
+'''
+            if 'nlb' in services and i == 1:
+                html += '''
+                                <div class="resource"><span class="resource-icon">⚡</span>NLB</div>
+'''
+            html += '''
+                                <div class="resource"><span class="resource-icon">🌐</span>NAT GW</div>
+                            </div>
+                            
+                            <div class="subnet private">
+                                <div class="subnet-title">Private Subnet (10.0.{}{}.0/24)</div>
+'''.format(i*10+1, '')
+            
+            # Add compute resources
+            if 'ec2' in services:
+                html += '''
+                                <div class="resource"><span class="resource-icon">💻</span>EC2</div>
+'''
+            if 'ecs' in services or 'fargate' in services:
+                html += '''
+                                <div class="resource"><span class="resource-icon">🐳</span>ECS</div>
+'''
+            if 'eks' in services:
+                html += '''
+                                <div class="resource"><span class="resource-icon">☸️</span>EKS</div>
+'''
+            if 'lambda' in services:
+                html += '''
+                                <div class="resource"><span class="resource-icon">⚡</span>Lambda</div>
+'''
+            
+            # Add data resources in first AZ
+            if i == 0:
+                if 'aurora' in services or 'rds' in services:
+                    html += '''
+                                <div class="resource"><span class="resource-icon">🗄️</span>DB Primary</div>
+'''
+                if 'elasticache' in services:
+                    html += '''
+                                <div class="resource"><span class="resource-icon">⚡</span>Cache</div>
+'''
+            elif i == 1:
+                if 'aurora' in services or 'rds' in services:
+                    html += '''
+                                <div class="resource"><span class="resource-icon">🗄️</span>DB Replica</div>
+'''
+            
+            html += '''
+                            </div>
+                        </div>
+'''
+        
+        html += '''
+                    </div>
+                </div>
+'''
+        
+        # Storage Layer
+        if storage_services:
+            html += '''
+                <div style="background: #e8f5e9; border: 2px solid #4CAF50; border-radius: 10px; padding: 12px; margin-top: 15px;">
+                    <div style="text-align: center; font-size: 12px; font-weight: bold; color: #2E7D32; margin-bottom: 10px;">📦 Storage Layer</div>
+                    <div style="display: flex; justify-content: center; gap: 15px;">
+'''
+            for svc in storage_services:
+                info = ArchitectureDiagramGenerator.SERVICE_INFO.get(svc, {'name': svc, 'icon': '📦'})
+                html += f'''
+                        <div class="resource">
+                            <span class="resource-icon">{info['icon']}</span>
+                            <span>{info['name']}</span>
+                        </div>
+'''
+            html += '''
+                    </div>
+                </div>
+'''
+        
+        # Data Flow
+        html += '''
+                <div class="data-flow">
+                    <div class="data-flow-title">📊 Data Flow</div>
+                    <div class="flow-row">
+                        <div class="flow-item"><span class="resource-icon">👥</span>Users</div>
+                        <span class="flow-arrow">→</span>
+'''
+        if 'cloudfront' in services:
+            html += '''
+                        <div class="flow-item"><span class="resource-icon">🌍</span>CDN</div>
+                        <span class="flow-arrow">→</span>
+'''
+        if 'waf' in services:
+            html += '''
+                        <div class="flow-item"><span class="resource-icon">🛡️</span>WAF</div>
+                        <span class="flow-arrow">→</span>
+'''
+        if 'alb' in services or 'api_gateway' in services:
+            html += '''
+                        <div class="flow-item"><span class="resource-icon">⚖️</span>LB/API</div>
+                        <span class="flow-arrow">→</span>
+'''
+        html += '''
+                        <div class="flow-item"><span class="resource-icon">💻</span>Compute</div>
+                        <span class="flow-arrow">→</span>
+'''
+        if 'elasticache' in services:
+            html += '''
+                        <div class="flow-item"><span class="resource-icon">⚡</span>Cache</div>
+                        <span class="flow-arrow">→</span>
+'''
+        html += '''
+                        <div class="flow-item"><span class="resource-icon">🗄️</span>Database</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Sidebar - Integration & Analytics -->
+            <div class="sidebar">
+                <div class="section integration">
+                    <div class="section-title">🔗 Integration</div>
+                    <div class="services-grid">
+'''
+        
+        for svc in integration_services:
+            info = ArchitectureDiagramGenerator.SERVICE_INFO.get(svc, {'name': svc, 'icon': '📦'})
+            html += f'''
+                        <div class="service-chip active">
+                            <span class="service-icon">{info['icon']}</span>
+                            <span>{info['name']}</span>
+                        </div>
+'''
+        
+        if not integration_services:
+            html += '''
+                        <div class="service-chip">
+                            <span>No integration services</span>
+                        </div>
+'''
+        
+        html += '''
+                    </div>
+                </div>
+'''
+        
+        if analytics_services:
+            html += '''
+                <div class="section" style="border-left: 4px solid #FF9800;">
+                    <div class="section-title">📈 Analytics & ML</div>
+                    <div class="services-grid">
+'''
+            for svc in analytics_services:
+                info = ArchitectureDiagramGenerator.SERVICE_INFO.get(svc, {'name': svc, 'icon': '📦'})
+                html += f'''
+                        <div class="service-chip active">
+                            <span class="service-icon">{info['icon']}</span>
+                            <span>{info['name']}</span>
+                        </div>
+'''
+            html += '''
+                    </div>
+                </div>
+'''
+        
+        html += '''
+            </div>
+        </div>
+        
+        <!-- Metrics Row -->
+        <div class="metrics-row">
+            <div class="metric">
+                <div class="metric-value">{}</div>
+                <div class="metric-label">Total Services</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{}</div>
+                <div class="metric-label">Security Services</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{}</div>
+                <div class="metric-label">Compute Services</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{}</div>
+                <div class="metric-label">Data Services</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">3</div>
+                <div class="metric-label">Availability Zones</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{}</div>
+                <div class="metric-label">Compliance</div>
+            </div>
+        </div>
+        
+        <!-- Legend -->
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fff3e0; border: 1px solid #FF9800;"></div>
+                <span>Public Subnet</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e3f2fd; border: 1px solid #2196F3;"></div>
+                <span>Private Subnet</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e8f5e9; border: 1px solid #4CAF50;"></div>
+                <span>VPC Boundary</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f3e5f5; border: 1px solid #9C27B0;"></div>
+                <span>Global/Edge</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ffebee; border: 1px solid #DD344C;"></div>
+                <span>Security</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fce4ec; border: 1px solid #E91E63;"></div>
+                <span>Data Flow</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>'''.format(
+            len(services),
+            len(security_services),
+            len(compute_services),
+            len(data_services),
+            len(compliance)
+        )
+        
+        return html
 
 class ArchitectureDesignerRevamped:
     """Revamped Architecture Designer with real-world use cases"""
@@ -839,7 +1927,7 @@ class ArchitectureDesignerRevamped:
     
     @staticmethod
     def _render_architecture_diagram(config: Dict):
-        """Render architecture visualization"""
+        """Render architecture visualization with HLD and LLD views"""
         st.markdown("### 🏗️ Architecture Visualization")
         
         services = config.get('recommended_services', [])
@@ -847,6 +1935,14 @@ class ArchitectureDesignerRevamped:
         if not services:
             st.warning("👆 Please configure your requirements first")
             return
+        
+        # Diagram type selection - HLD vs LLD
+        diagram_type = st.radio(
+            "Select Diagram Type:",
+            ["📊 High-Level Design (HLD)", "📐 Low-Level Design (LLD)"],
+            horizontal=True,
+            key="arch_diagram_type_selector"
+        )
         
         # Allow manual service adjustment
         with st.expander("✏️ Customize Services", expanded=False):
@@ -861,23 +1957,45 @@ class ArchitectureDesignerRevamped:
             )
             config['recommended_services'] = services
         
-        # Generate diagram
+        # Generate title
         title = f"Architecture - {config.get('scale', 'medium').title()} Scale"
         if config.get('industry'):
             title = f"{INDUSTRY_TEMPLATES.get(config['industry'], {}).get('name', '')} Architecture"
         
-        diagram_html = ArchitectureDiagramGenerator.generate_diagram(services, title, config)
-        
-        # Display using components.html
-        components.html(diagram_html, height=800, scrolling=True)
-        
-        # Download button
-        st.download_button(
-            label="📥 Download Architecture Diagram",
-            data=diagram_html,
-            file_name="architecture_diagram.html",
-            mime="text/html"
-        )
+        if "High-Level" in diagram_type:
+            # Generate HLD diagram
+            st.markdown("#### 📊 High-Level Architecture Overview")
+            st.caption("Simplified view showing major components, data flow, and service tiers")
+            
+            diagram_html = ArchitectureDiagramGenerator.generate_hld(services, title, config)
+            components.html(diagram_html, height=700, scrolling=True)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="📥 Download HLD Diagram",
+                    data=diagram_html,
+                    file_name=f"architecture_HLD.html",
+                    mime="text/html",
+                    key="download_arch_hld"
+                )
+        else:
+            # Generate LLD diagram
+            st.markdown("#### 📐 Low-Level Design - Complete Architecture")
+            st.caption("Comprehensive view with networking, security boundaries, data flows, and all components")
+            
+            lld_html = ArchitectureDiagramGenerator.generate_lld(services, title, config)
+            components.html(lld_html, height=950, scrolling=True)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="📥 Download LLD Diagram",
+                    data=lld_html,
+                    file_name=f"architecture_LLD.html",
+                    mime="text/html",
+                    key="download_arch_lld"
+                )
         
         # WAF Score
         st.markdown("---")
