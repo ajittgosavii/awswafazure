@@ -378,6 +378,721 @@ class EKSSVGDiagramGenerator:
         """Generate a download link for the diagram"""
         b64 = base64.b64encode(html_content.encode()).decode()
         return f'<a href="data:text/html;base64,{b64}" download="{filename}" style="display: inline-block; background: #4CAF50; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold;">📥 Download Architecture Diagram</a>'
+    
+    @staticmethod
+    def generate_detailed_lld(config: Dict) -> str:
+        """Generate a comprehensive Low-Level Design diagram with all EKS components"""
+        if isinstance(config, str):
+            config = json.loads(config)
+        
+        project_name = config.get('project_name', 'my-eks-cluster')
+        region = config.get('region', 'us-east-1')
+        azs = config.get('availability_zones', ['us-east-1a', 'us-east-1b', 'us-east-1c'])
+        node_groups = config.get('node_groups', [])
+        addons = config.get('addons', [])
+        environment = config.get('environment', 'production')
+        workload_types = config.get('workload_types', ['Web/API'])
+        compliance = config.get('compliance', [])
+        
+        az_count = len(azs)
+        ng = node_groups[0] if node_groups else {}
+        instance_type = ng.get('instance_type', 'm6i.large')
+        capacity_type = ng.get('capacity_type', 'ON_DEMAND')
+        min_nodes = ng.get('min_size', 3)
+        max_nodes = ng.get('max_size', 20)
+        
+        # Determine which components to show based on config
+        has_gpu = 'ML/AI' in workload_types
+        has_stateful = 'Databases' in workload_types
+        is_prod = environment == 'production'
+        
+        html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: 'Segoe UI', -apple-system, Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 15px;
+            font-size: 11px;
+        }}
+        .lld-container {{
+            max-width: 1400px;
+            margin: 0 auto;
+        }}
+        .header {{
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: linear-gradient(135deg, #232F3E 0%, #37475A 100%);
+            border-radius: 10px;
+            color: white;
+        }}
+        .header h1 {{
+            font-size: 18px;
+            margin-bottom: 5px;
+        }}
+        .header .subtitle {{
+            font-size: 12px;
+            opacity: 0.9;
+        }}
+        .header .meta {{
+            font-size: 10px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }}
+        
+        /* Main Grid Layout */
+        .main-grid {{
+            display: grid;
+            grid-template-columns: 200px 1fr 200px;
+            gap: 12px;
+        }}
+        
+        /* Section Styles */
+        .section {{
+            background: white;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .section-title {{
+            font-weight: bold;
+            font-size: 11px;
+            padding: 5px 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }}
+        
+        /* Color Schemes */
+        .aws-orange {{ background: #FF9900; color: white; }}
+        .eks-blue {{ background: #326CE5; color: white; }}
+        .security-red {{ background: #D32F2F; color: white; }}
+        .network-green {{ background: #388E3C; color: white; }}
+        .storage-purple {{ background: #7B1FA2; color: white; }}
+        .compute-blue {{ background: #1976D2; color: white; }}
+        .observability-teal {{ background: #00897B; color: white; }}
+        .cicd-indigo {{ background: #3F51B5; color: white; }}
+        
+        /* Component Box */
+        .component {{
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 6px 8px;
+            margin-bottom: 6px;
+            font-size: 10px;
+        }}
+        .component-name {{
+            font-weight: 600;
+            color: #333;
+        }}
+        .component-desc {{
+            color: #666;
+            font-size: 9px;
+        }}
+        .component-icon {{
+            font-size: 12px;
+        }}
+        
+        /* VPC Container */
+        .vpc-container {{
+            border: 3px solid #147EB4;
+            border-radius: 10px;
+            padding: 12px;
+            background: linear-gradient(180deg, #E3F2FD 0%, #BBDEFB 100%);
+        }}
+        .vpc-header {{
+            background: #147EB4;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 5px;
+            display: inline-block;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }}
+        
+        /* AZ Grid */
+        .az-grid {{
+            display: grid;
+            grid-template-columns: repeat({az_count}, 1fr);
+            gap: 10px;
+            margin-bottom: 12px;
+        }}
+        .az-box {{
+            border: 2px solid #5C6BC0;
+            border-radius: 8px;
+            background: white;
+            overflow: hidden;
+        }}
+        .az-header {{
+            background: #5C6BC0;
+            color: white;
+            padding: 5px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 11px;
+        }}
+        .az-content {{
+            padding: 8px;
+        }}
+        
+        /* Subnet Styles */
+        .subnet {{
+            border-radius: 5px;
+            padding: 6px;
+            margin-bottom: 6px;
+        }}
+        .private-subnet {{
+            background: #E8F5E9;
+            border: 1px solid #4CAF50;
+        }}
+        .public-subnet {{
+            background: #FFF3E0;
+            border: 1px solid #FF9800;
+        }}
+        .subnet-label {{
+            font-weight: bold;
+            font-size: 9px;
+            margin-bottom: 4px;
+        }}
+        .private-label {{ color: #2E7D32; }}
+        .public-label {{ color: #E65100; }}
+        
+        /* Node Styles */
+        .node {{
+            background: #E3F2FD;
+            border: 1px solid #1976D2;
+            border-radius: 4px;
+            padding: 4px 6px;
+            margin: 3px 0;
+            font-size: 9px;
+        }}
+        .node.spot {{
+            background: #FFF8E1;
+            border-color: #FFA000;
+        }}
+        .node.gpu {{
+            background: #F3E5F5;
+            border-color: #7B1FA2;
+        }}
+        
+        /* Control Plane */
+        .control-plane {{
+            background: linear-gradient(135deg, #326CE5 0%, #1E4DB7 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            margin: 12px 0;
+        }}
+        .control-plane h3 {{
+            font-size: 13px;
+            margin-bottom: 8px;
+        }}
+        .cp-components {{
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }}
+        .cp-component {{
+            background: rgba(255,255,255,0.2);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+        }}
+        
+        /* Karpenter Box */
+        .karpenter {{
+            background: linear-gradient(135deg, #FF6B6B 0%, #EE5A5A 100%);
+            color: white;
+            border-radius: 6px;
+            padding: 8px;
+            margin: 8px 0;
+        }}
+        .karpenter-title {{
+            font-weight: bold;
+            font-size: 11px;
+        }}
+        .karpenter-desc {{
+            font-size: 9px;
+            opacity: 0.9;
+        }}
+        
+        /* Service Mesh */
+        .service-mesh {{
+            background: #E8EAF6;
+            border: 1px dashed #3F51B5;
+            border-radius: 5px;
+            padding: 6px;
+            margin: 6px 0;
+            text-align: center;
+            font-size: 9px;
+        }}
+        
+        /* External Services */
+        .external-services {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }}
+        .ext-service {{
+            background: #ECEFF1;
+            border-radius: 5px;
+            padding: 6px;
+            text-align: center;
+        }}
+        .ext-service-icon {{
+            font-size: 16px;
+        }}
+        .ext-service-name {{
+            font-size: 9px;
+            font-weight: 600;
+        }}
+        
+        /* Connections */
+        .connections {{
+            text-align: center;
+            padding: 8px;
+            font-size: 10px;
+            color: #666;
+        }}
+        .arrow {{
+            color: #1976D2;
+            font-size: 14px;
+        }}
+        
+        /* Legend */
+        .legend {{
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 12px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+        }}
+        .legend-item {{
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 9px;
+        }}
+        .legend-color {{
+            width: 14px;
+            height: 10px;
+            border-radius: 2px;
+        }}
+        
+        /* Pod examples */
+        .pod {{
+            display: inline-block;
+            background: #E1F5FE;
+            border: 1px solid #03A9F4;
+            border-radius: 3px;
+            padding: 2px 5px;
+            font-size: 8px;
+            margin: 2px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="lld-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📐 EKS Low-Level Design: {project_name}</h1>
+            <div class="subtitle">Comprehensive Architecture with All Components</div>
+            <div class="meta">Region: {region} | AZs: {az_count} | Environment: {environment.title()} | Nodes: {min_nodes}-{max_nodes}</div>
+        </div>
+        
+        <!-- Main Grid -->
+        <div class="main-grid">
+            
+            <!-- Left Column: External Services & Security -->
+            <div class="left-column">
+                <!-- External Traffic -->
+                <div class="section">
+                    <div class="section-title aws-orange">🌐 External Traffic</div>
+                    <div class="component">
+                        <div class="component-icon">🌍</div>
+                        <div class="component-name">Route 53</div>
+                        <div class="component-desc">DNS Management</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🔒</div>
+                        <div class="component-name">ACM</div>
+                        <div class="component-desc">TLS Certificates</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🛡️</div>
+                        <div class="component-name">WAF</div>
+                        <div class="component-desc">Web App Firewall</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🌐</div>
+                        <div class="component-name">CloudFront</div>
+                        <div class="component-desc">CDN (Optional)</div>
+                    </div>
+                </div>
+                
+                <!-- Security Services -->
+                <div class="section" style="margin-top: 10px;">
+                    <div class="section-title security-red">🔐 Security</div>
+                    <div class="component">
+                        <div class="component-icon">🔑</div>
+                        <div class="component-name">IAM / IRSA</div>
+                        <div class="component-desc">Pod-level permissions</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🗝️</div>
+                        <div class="component-name">Secrets Manager</div>
+                        <div class="component-desc">Secrets storage</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🔐</div>
+                        <div class="component-name">KMS</div>
+                        <div class="component-desc">Encryption keys</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🛡️</div>
+                        <div class="component-name">GuardDuty</div>
+                        <div class="component-desc">Threat detection</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">📋</div>
+                        <div class="component-name">Security Hub</div>
+                        <div class="component-desc">Compliance</div>
+                    </div>
+                </div>
+                
+                <!-- CI/CD -->
+                <div class="section" style="margin-top: 10px;">
+                    <div class="section-title cicd-indigo">🔄 GitOps / CI/CD</div>
+                    <div class="component">
+                        <div class="component-icon">🔄</div>
+                        <div class="component-name">ArgoCD</div>
+                        <div class="component-desc">GitOps deployment</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">📦</div>
+                        <div class="component-name">ECR</div>
+                        <div class="component-desc">Container registry</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🏗️</div>
+                        <div class="component-name">CodePipeline</div>
+                        <div class="component-desc">CI/CD Pipeline</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Center: VPC & Kubernetes -->
+            <div class="center-column">
+                <div class="vpc-container">
+                    <div class="vpc-header">🌐 VPC: 10.0.0.0/16</div>
+                    
+                    <!-- Load Balancers -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <div class="component" style="flex: 1; text-align: center;">
+                            <div class="component-icon">⚖️</div>
+                            <div class="component-name">ALB (Application)</div>
+                            <div class="component-desc">HTTP/HTTPS Ingress</div>
+                        </div>
+                        <div class="component" style="flex: 1; text-align: center;">
+                            <div class="component-icon">⚡</div>
+                            <div class="component-name">NLB (Network)</div>
+                            <div class="component-desc">TCP/UDP Traffic</div>
+                        </div>
+                    </div>
+                    
+                    <!-- AZ Grid -->
+                    <div class="az-grid">
+'''
+        
+        # Generate AZs
+        for i, az in enumerate(azs):
+            az_name = az.split('-')[-1].upper() if '-' in az else az.upper()
+            html += f'''
+                        <div class="az-box">
+                            <div class="az-header">📍 AZ-{az_name}</div>
+                            <div class="az-content">
+                                <!-- Private Subnet -->
+                                <div class="subnet private-subnet">
+                                    <div class="subnet-label private-label">🔒 Private (10.0.{i+1}.0/24)</div>
+                                    <div class="node {"spot" if capacity_type == "SPOT" else ""}">
+                                        💻 {instance_type}
+                                        <div class="pod">nginx</div>
+                                        <div class="pod">api</div>
+                                    </div>
+                                    <div class="node {"spot" if capacity_type == "SPOT" else ""}">
+                                        💻 {instance_type}
+                                        <div class="pod">worker</div>
+                                    </div>'''
+            
+            if has_gpu:
+                html += f'''
+                                    <div class="node gpu">
+                                        🎮 g5.xlarge (GPU)
+                                        <div class="pod">ml-inference</div>
+                                    </div>'''
+            
+            html += f'''
+                                </div>
+                                
+                                <!-- Public Subnet -->
+                                <div class="subnet public-subnet">
+                                    <div class="subnet-label public-label">🌍 Public (10.0.{100+i+1}.0/24)</div>
+                                    <div style="font-size: 9px;">🔀 NAT Gateway</div>
+                                </div>
+                            </div>
+                        </div>
+'''
+        
+        html += f'''
+                    </div>
+                    
+                    <!-- Karpenter -->
+                    <div class="karpenter">
+                        <div class="karpenter-title">🚀 Karpenter - Intelligent Node Provisioning</div>
+                        <div class="karpenter-desc">
+                            Auto-scales nodes based on pod requirements | Instance types: {instance_type}, c6i.*, r6i.* | 
+                            Capacity: {"Spot + On-Demand" if capacity_type == "SPOT" else "On-Demand"} | Consolidation: Enabled
+                        </div>
+                    </div>
+                    
+                    <!-- Service Mesh -->
+                    <div class="service-mesh">
+                        🕸️ <strong>Service Mesh (Optional)</strong>: Istio / App Mesh | mTLS | Traffic Management | Observability
+                    </div>
+                    
+                    <!-- EKS Control Plane -->
+                    <div class="control-plane">
+                        <h3>☸️ EKS Control Plane (Managed by AWS)</h3>
+                        <div class="cp-components">
+                            <div class="cp-component">🔌 API Server</div>
+                            <div class="cp-component">💾 etcd</div>
+                            <div class="cp-component">📋 Scheduler</div>
+                            <div class="cp-component">🎛️ Controller Manager</div>
+                            <div class="cp-component">☁️ Cloud Controller</div>
+                        </div>
+                    </div>
+                    
+                    <!-- In-Cluster Components -->
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;">
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">🌐</div>
+                            <div class="component-name">CoreDNS</div>
+                            <div class="component-desc">Service Discovery</div>
+                        </div>
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">🔌</div>
+                            <div class="component-name">VPC CNI</div>
+                            <div class="component-desc">Pod Networking</div>
+                        </div>
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">🔄</div>
+                            <div class="component-name">kube-proxy</div>
+                            <div class="component-desc">Service Routing</div>
+                        </div>
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">⚖️</div>
+                            <div class="component-name">AWS LB Controller</div>
+                            <div class="component-desc">Ingress/Service LB</div>
+                        </div>
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">🌐</div>
+                            <div class="component-name">ExternalDNS</div>
+                            <div class="component-desc">Route53 Sync</div>
+                        </div>
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">🔐</div>
+                            <div class="component-name">External Secrets</div>
+                            <div class="component-desc">Secrets Sync</div>
+                        </div>
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">📊</div>
+                            <div class="component-name">Metrics Server</div>
+                            <div class="component-desc">HPA/VPA Metrics</div>
+                        </div>
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">🛡️</div>
+                            <div class="component-name">Pod Security</div>
+                            <div class="component-desc">PSS Restricted</div>
+                        </div>
+                        <div class="component" style="text-align: center;">
+                            <div class="component-icon">🔒</div>
+                            <div class="component-name">Network Policies</div>
+                            <div class="component-desc">Pod Isolation</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- External Services Grid -->
+                <div class="external-services">
+                    <div class="ext-service">
+                        <div class="ext-service-icon">🌐</div>
+                        <div class="ext-service-name">Internet Gateway</div>
+                    </div>
+                    <div class="ext-service">
+                        <div class="ext-service-icon">🔗</div>
+                        <div class="ext-service-name">VPC Endpoints</div>
+                    </div>
+                    <div class="ext-service">
+                        <div class="ext-service-icon">🏢</div>
+                        <div class="ext-service-name">Transit Gateway</div>
+                    </div>
+                    <div class="ext-service">
+                        <div class="ext-service-icon">👥</div>
+                        <div class="ext-service-name">Users / Internet</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Column: Observability & Storage -->
+            <div class="right-column">
+                <!-- Observability -->
+                <div class="section">
+                    <div class="section-title observability-teal">📊 Observability</div>
+                    <div class="component">
+                        <div class="component-icon">📈</div>
+                        <div class="component-name">Prometheus</div>
+                        <div class="component-desc">Metrics collection</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">📊</div>
+                        <div class="component-name">Grafana</div>
+                        <div class="component-desc">Dashboards</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">☁️</div>
+                        <div class="component-name">CloudWatch</div>
+                        <div class="component-desc">Container Insights</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">📝</div>
+                        <div class="component-name">Fluent Bit</div>
+                        <div class="component-desc">Log forwarding</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🔍</div>
+                        <div class="component-name">X-Ray</div>
+                        <div class="component-desc">Distributed tracing</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🚨</div>
+                        <div class="component-name">AlertManager</div>
+                        <div class="component-desc">Alert routing</div>
+                    </div>
+                </div>
+                
+                <!-- Storage -->
+                <div class="section" style="margin-top: 10px;">
+                    <div class="section-title storage-purple">💾 Storage</div>
+                    <div class="component">
+                        <div class="component-icon">💿</div>
+                        <div class="component-name">EBS CSI Driver</div>
+                        <div class="component-desc">Block storage (gp3)</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">📁</div>
+                        <div class="component-name">EFS CSI Driver</div>
+                        <div class="component-desc">Shared filesystem</div>
+                    </div>'''
+        
+        if has_stateful:
+            html += '''
+                    <div class="component">
+                        <div class="component-icon">🗄️</div>
+                        <div class="component-name">RDS</div>
+                        <div class="component-desc">Managed database</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">⚡</div>
+                        <div class="component-name">ElastiCache</div>
+                        <div class="component-desc">Redis/Memcached</div>
+                    </div>'''
+        
+        html += '''
+                    <div class="component">
+                        <div class="component-icon">📦</div>
+                        <div class="component-name">S3</div>
+                        <div class="component-desc">Object storage</div>
+                    </div>
+                </div>
+                
+                <!-- Data Services -->
+                <div class="section" style="margin-top: 10px;">
+                    <div class="section-title compute-blue">📡 Data & Messaging</div>
+                    <div class="component">
+                        <div class="component-icon">📨</div>
+                        <div class="component-name">SQS</div>
+                        <div class="component-desc">Message queues</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">📢</div>
+                        <div class="component-name">SNS</div>
+                        <div class="component-desc">Pub/Sub</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">🌊</div>
+                        <div class="component-name">Kinesis</div>
+                        <div class="component-desc">Data streaming</div>
+                    </div>
+                    <div class="component">
+                        <div class="component-icon">📊</div>
+                        <div class="component-name">MSK (Kafka)</div>
+                        <div class="component-desc">Event streaming</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Legend -->
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #E3F2FD; border: 1px solid #1976D2;"></div>
+                <span>On-Demand Node</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFF8E1; border: 1px solid #FFA000;"></div>
+                <span>Spot Node</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #F3E5F5; border: 1px solid #7B1FA2;"></div>
+                <span>GPU Node</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #E8F5E9; border: 1px solid #4CAF50;"></div>
+                <span>Private Subnet</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFF3E0; border: 1px solid #FF9800;"></div>
+                <span>Public Subnet</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #E1F5FE; border: 1px solid #03A9F4;"></div>
+                <span>Pod</span>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div style="text-align: center; margin-top: 12px; font-size: 9px; color: #666;">
+            Generated by EKS Architecture Wizard | {environment.title()} Environment | 
+            Instance: {instance_type} | Scaling: {min_nodes}-{max_nodes} nodes | 
+            Compliance: {", ".join(compliance) if compliance else "Standard"}
+        </div>
+    </div>
+</body>
+</html>'''
+        
+        return html
 
 
 # ============================================================================
@@ -1625,7 +2340,7 @@ class EKSModernizationModuleRevamped:
     
     @staticmethod
     def _render_architecture_tab():
-        """Render architecture diagram"""
+        """Render architecture diagram with HLD and LLD views"""
         st.markdown("### 🏗️ Architecture Visualization")
         
         if 'eks_config' not in st.session_state:
@@ -1634,67 +2349,230 @@ class EKSModernizationModuleRevamped:
         
         config = st.session_state.eks_config
         
-        # Generate HTML diagram
-        diagram_html = EKSSVGDiagramGenerator.generate_cluster_diagram(config)
-        
-        # Display the diagram using st.components.v1.html (properly renders HTML)
-        st.markdown("#### Your EKS Architecture")
-        
-        # Use components.html to render the HTML properly
-        import streamlit.components.v1 as components
-        components.html(diagram_html, height=750, scrolling=True)
-        
-        # Download button using Streamlit native
-        st.download_button(
-            label="📥 Download Architecture Diagram",
-            data=diagram_html,
-            file_name=f"{config['project_name']}_architecture.html",
-            mime="text/html"
+        # Diagram type selection
+        diagram_type = st.radio(
+            "Select Diagram Type:",
+            ["📊 High-Level Design (HLD)", "📐 Low-Level Design (LLD)"],
+            horizontal=True,
+            key="diagram_type_selector"
         )
+        
+        import streamlit.components.v1 as components
+        
+        if "High-Level" in diagram_type:
+            # Generate HLD diagram
+            st.markdown("#### 📊 High-Level Architecture Overview")
+            st.caption("Simplified view showing VPC, AZs, subnets, and control plane")
+            
+            diagram_html = EKSSVGDiagramGenerator.generate_cluster_diagram(config)
+            components.html(diagram_html, height=700, scrolling=True)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="📥 Download HLD Diagram",
+                    data=diagram_html,
+                    file_name=f"{config['project_name']}_HLD.html",
+                    mime="text/html",
+                    key="download_hld"
+                )
+        else:
+            # Generate LLD diagram
+            st.markdown("#### 📐 Low-Level Design - Complete Architecture")
+            st.caption("Comprehensive view with all components: Karpenter, Service Mesh, Observability, Security, Storage, and more")
+            
+            lld_html = EKSSVGDiagramGenerator.generate_detailed_lld(config)
+            components.html(lld_html, height=950, scrolling=True)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="📥 Download LLD Diagram",
+                    data=lld_html,
+                    file_name=f"{config['project_name']}_LLD.html",
+                    mime="text/html",
+                    key="download_lld"
+                )
         
         # Architecture summary
         st.markdown("---")
         st.markdown("### 📋 Architecture Summary")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.metric("Region", config['region'])
             st.metric("Availability Zones", len(config['availability_zones']))
         
         with col2:
-            if config['node_groups']:
+            if config.get('node_groups'):
                 ng = config['node_groups'][0]
-                st.metric("Instance Type", ng['instance_type'])
-                st.metric("Node Range", f"{ng['min_size']} - {ng['max_size']}")
+                st.metric("Instance Type", ng.get('instance_type', 'm6i.large'))
+                st.metric("Node Range", f"{ng.get('min_size', 3)} - {ng.get('max_size', 20)}")
+            else:
+                st.metric("Instance Type", "m6i.large")
+                st.metric("Node Range", "3 - 20")
         
         with col3:
             st.metric("Add-ons", len(config.get('addons', [])))
-            st.metric("Environment", config['environment'].title())
+            st.metric("Environment", config.get('environment', 'production').title())
         
-        # Component details
-        st.markdown("### 🔧 Components")
+        with col4:
+            compliance = config.get('compliance', [])
+            st.metric("Compliance", len(compliance) if compliance else "Standard")
+            workloads = config.get('workload_types', ['Web/API'])
+            st.metric("Workload Types", len(workloads))
         
-        with st.expander("📦 Node Groups"):
-            for ng in config.get('node_groups', []):
+        # Component details in expanders
+        st.markdown("### 🔧 Component Details")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            with st.expander("📦 Node Groups & Compute", expanded=False):
+                st.markdown("**Karpenter Configuration:**")
+                st.code("""
+apiVersion: karpenter.sh/v1beta1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  template:
+    spec:
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["m6i.large", "m6i.xlarge", "c6i.large"]
+      nodeClassRef:
+        name: default
+  limits:
+    cpu: 1000
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 30s
+                """, language="yaml")
+                
+                for ng in config.get('node_groups', []):
+                    st.markdown(f"""
+**{ng.get('name', 'primary')} Node Group:**
+- Instance Type: `{ng.get('instance_type', 'm6i.large')}`
+- Capacity: `{ng.get('capacity_type', 'ON_DEMAND')}`
+- Scaling: `{ng.get('min_size', 3)}` - `{ng.get('max_size', 20)}` nodes
+                    """)
+            
+            with st.expander("🌐 Networking", expanded=False):
                 st.markdown(f"""
-                - **Name:** {ng['name']}
-                - **Instance Type:** {ng['instance_type']}
-                - **Capacity:** {ng.get('capacity_type', 'ON_DEMAND')}
-                - **Scaling:** {ng['min_size']} - {ng['max_size']} nodes
+**VPC Configuration:**
+- CIDR: `10.0.0.0/16`
+- Availability Zones: `{', '.join(config.get('availability_zones', []))}`
+- NAT Gateways: `{len(config.get('availability_zones', []))}` (HA mode)
+
+**Subnets per AZ:**
+- Private: `/24` (worker nodes, pods)
+- Public: `/24` (NAT GW, ALB)
+
+**Key Components:**
+- 🔌 **VPC CNI**: Native AWS networking for pods
+- ⚖️ **AWS LB Controller**: ALB/NLB provisioning
+- 🌐 **ExternalDNS**: Route53 DNS sync
+- 🔗 **VPC Endpoints**: ECR, S3, STS, Logs
+                """)
+            
+            with st.expander("🔐 Security Components", expanded=False):
+                st.markdown("""
+**Identity & Access:**
+- 🔑 **IRSA**: IAM Roles for Service Accounts
+- 🛡️ **Pod Identity**: AWS Pod Identity Agent
+- 🔒 **OIDC Provider**: Federated authentication
+
+**Runtime Security:**
+- 📋 **Pod Security Standards**: Restricted profile
+- 🔒 **Network Policies**: Calico/Cilium
+- 🛡️ **GuardDuty EKS**: Runtime threat detection
+
+**Secrets Management:**
+- 🗝️ **External Secrets Operator**: Sync from Secrets Manager
+- 🔐 **KMS Encryption**: etcd & EBS encryption
+- 📦 **Sealed Secrets**: GitOps-safe secrets
                 """)
         
-        with st.expander("🔌 Add-ons"):
-            for addon in config.get('addons', []):
-                st.markdown(f"- {addon}")
-        
-        with st.expander("🌐 Networking"):
-            st.markdown(f"""
-            - **VPC:** New VPC with public/private subnets
-            - **Availability Zones:** {', '.join(config['availability_zones'])}
-            - **NAT Gateways:** {len(config['availability_zones'])} (one per AZ)
-            - **Load Balancer:** AWS ALB via Load Balancer Controller
-            """)
+        with col2:
+            with st.expander("📊 Observability Stack", expanded=False):
+                st.markdown("""
+**Metrics:**
+- 📈 **Prometheus**: Metrics collection & storage
+- 📊 **Grafana**: Dashboards & visualization
+- 📏 **Metrics Server**: HPA/VPA support
+- ☁️ **CloudWatch Container Insights**: AWS native
+
+**Logging:**
+- 📝 **Fluent Bit**: Log collection & forwarding
+- 📋 **CloudWatch Logs**: Centralized logging
+- 🔍 **OpenSearch**: Log analytics (optional)
+
+**Tracing:**
+- 🔍 **AWS X-Ray**: Distributed tracing
+- 🕸️ **Jaeger/Tempo**: Open-source alternative
+
+**Alerting:**
+- 🚨 **AlertManager**: Alert routing
+- 📱 **PagerDuty/Slack**: Notifications
+                """)
+            
+            with st.expander("💾 Storage Configuration", expanded=False):
+                st.markdown("""
+**Block Storage (EBS):**
+- 💿 **EBS CSI Driver**: Dynamic provisioning
+- 📊 **Storage Classes**: gp3, io2
+- 📸 **Snapshots**: Volume backup
+
+**File Storage (EFS):**
+- 📁 **EFS CSI Driver**: Shared filesystem
+- 🔄 **Access Modes**: ReadWriteMany
+- 🔒 **Encryption**: At-rest & in-transit
+
+**Object Storage:**
+- 📦 **S3**: Application data, backups
+- 🔗 **S3 CSI Driver**: Mount as filesystem
+                """)
+            
+            with st.expander("🔄 GitOps & CI/CD", expanded=False):
+                st.markdown("""
+**GitOps:**
+- 🔄 **ArgoCD**: Declarative deployments
+- 📦 **Helm**: Package management
+- 🔐 **Sealed Secrets**: Encrypted secrets in Git
+
+**CI/CD Pipeline:**
+- 🏗️ **CodePipeline/GitHub Actions**: Build automation
+- 📦 **ECR**: Container registry
+- 🔍 **Trivy/Snyk**: Image scanning
+
+**Deployment Strategies:**
+- 🔄 **Rolling Updates**: Zero-downtime
+- 🔵🟢 **Blue-Green**: Traffic switching
+- 🐤 **Canary**: Progressive rollout
+                """)
+            
+            with st.expander("🔌 Add-ons Installed", expanded=False):
+                addons_info = {
+                    'vpc-cni': ('🔌', 'AWS VPC CNI', 'Native pod networking'),
+                    'coredns': ('🌐', 'CoreDNS', 'Cluster DNS'),
+                    'kube-proxy': ('🔄', 'kube-proxy', 'Service networking'),
+                    'aws-ebs-csi-driver': ('💿', 'EBS CSI', 'Block storage'),
+                    'aws-efs-csi-driver': ('📁', 'EFS CSI', 'File storage'),
+                    'aws-load-balancer-controller': ('⚖️', 'LB Controller', 'ALB/NLB'),
+                    'metrics-server': ('📊', 'Metrics Server', 'HPA metrics'),
+                    'cluster-autoscaler': ('📈', 'Cluster Autoscaler', 'Node scaling'),
+                    'aws-cloudwatch-observability': ('☁️', 'CloudWatch', 'Observability'),
+                }
+                
+                for addon in config.get('addons', []):
+                    info = addons_info.get(addon, ('📦', addon, 'Add-on'))
+                    st.markdown(f"{info[0]} **{info[1]}**: {info[2]}")
     
     @staticmethod
     def _render_security_tab():
