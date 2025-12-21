@@ -12,6 +12,9 @@ This module KEEPS all existing functionality and ADDS AI features:
 + PDF report generation
 """
 
+# Module-level imports for caching decorators
+import streamlit as st
+
 def render_integrated_waf_scanner():
     """
     Enhanced WAF Scanner with AI integration
