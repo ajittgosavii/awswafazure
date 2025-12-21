@@ -368,15 +368,28 @@ class ArchitectureDiagramGenerator:
         'kms': {'name': 'KMS', 'icon': '🔐', 'category': 'Security', 'color': '#DD344C'},
         'secrets_manager': {'name': 'Secrets Manager', 'icon': '🗝️', 'category': 'Security', 'color': '#DD344C'},
         'guardduty': {'name': 'GuardDuty', 'icon': '🛡️', 'category': 'Security', 'color': '#DD344C'},
+        'security_hub': {'name': 'Security Hub', 'icon': '🔒', 'category': 'Security', 'color': '#DD344C'},
+        'macie': {'name': 'Macie', 'icon': '🔍', 'category': 'Security', 'color': '#DD344C'},
+        'inspector': {'name': 'Inspector', 'icon': '🔎', 'category': 'Security', 'color': '#DD344C'},
         'cloudwatch': {'name': 'CloudWatch', 'icon': '📊', 'category': 'Monitoring', 'color': '#E7157B'},
         'cloudtrail': {'name': 'CloudTrail', 'icon': '📋', 'category': 'Audit', 'color': '#E7157B'},
         'config': {'name': 'Config', 'icon': '⚙️', 'category': 'Compliance', 'color': '#E7157B'},
+        'xray': {'name': 'X-Ray', 'icon': '🔬', 'category': 'Tracing', 'color': '#E7157B'},
         'sagemaker': {'name': 'SageMaker', 'icon': '🤖', 'category': 'ML', 'color': '#01A88D'},
         'glue': {'name': 'Glue', 'icon': '🔗', 'category': 'ETL', 'color': '#8C4FFF'},
         'athena': {'name': 'Athena', 'icon': '🔍', 'category': 'Analytics', 'color': '#8C4FFF'},
         'redshift': {'name': 'Redshift', 'icon': '📈', 'category': 'Data Warehouse', 'color': '#8C4FFF'},
         'vpc': {'name': 'VPC', 'icon': '🌐', 'category': 'Networking', 'color': '#8C4FFF'},
         'iam': {'name': 'IAM', 'icon': '🔑', 'category': 'Identity', 'color': '#DD344C'},
+        'rds_proxy': {'name': 'RDS Proxy', 'icon': '🔀', 'category': 'Database', 'color': '#3B48CC'},
+        'auto_scaling': {'name': 'Auto Scaling', 'icon': '📈', 'category': 'Compute', 'color': '#ED7100'},
+        'step_functions': {'name': 'Step Functions', 'icon': '🔄', 'category': 'Orchestration', 'color': '#E7157B'},
+        'mediaconvert': {'name': 'MediaConvert', 'icon': '🎬', 'category': 'Media', 'color': '#ED7100'},
+        'gamelift': {'name': 'GameLift', 'icon': '🎮', 'category': 'Gaming', 'color': '#ED7100'},
+        'global_accelerator': {'name': 'Global Accelerator', 'icon': '🌐', 'category': 'Networking', 'color': '#8C4FFF'},
+        'direct_connect': {'name': 'Direct Connect', 'icon': '🔌', 'category': 'Networking', 'color': '#8C4FFF'},
+        'backup': {'name': 'AWS Backup', 'icon': '💾', 'category': 'Storage', 'color': '#3F8624'},
+        'ebs': {'name': 'EBS', 'icon': '💿', 'category': 'Storage', 'color': '#3F8624'},
     }
     
     @staticmethod
@@ -838,10 +851,12 @@ class ArchitectureDesignerRevamped:
         # Allow manual service adjustment
         with st.expander("✏️ Customize Services", expanded=False):
             all_services = list(ArchitectureDiagramGenerator.SERVICE_INFO.keys())
+            # Filter services to only include those in SERVICE_INFO
+            valid_services = [s for s in services if s in all_services]
             services = st.multiselect(
                 "Services in Architecture",
                 all_services,
-                default=services,
+                default=valid_services,
                 format_func=lambda x: ArchitectureDiagramGenerator.SERVICE_INFO.get(x, {}).get('name', x)
             )
             config['recommended_services'] = services
