@@ -1581,8 +1581,21 @@ class FinOpsEnterpriseModule:
         if carbon_data.get('recommendations'):
             st.markdown("---")
             st.markdown("### 💡 Carbon Reduction Recommendations")
-            for i, rec in enumerate(carbon_data['recommendations'][:5], 1):
-                st.markdown(f"{i}. {rec}")
+            
+            recommendations = carbon_data['recommendations'][:5]
+            for i, rec in enumerate(recommendations, 1):
+                # Handle both dict format (demo) and string format (live)
+                if isinstance(rec, dict):
+                    # Demo mode format with full details
+                    action = rec.get('action', 'Optimization recommendation')
+                    impact = rec.get('impact', '')
+                    priority = rec.get('priority', 'Medium')
+                    
+                    priority_emoji = '🔴' if priority == 'High' else '🟡' if priority == 'Medium' else '🟢'
+                    st.markdown(f"{i}. {priority_emoji} **{action}** - {impact}")
+                else:
+                    # Live mode format (simple string)
+                    st.markdown(f"{i}. {rec}")
     
     @staticmethod
     def _render_ai_insights(ai_available):
