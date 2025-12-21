@@ -1,3 +1,4 @@
+import streamlit as st
 """
 Compliance Framework Mapper
 Maps AWS WAF findings to industry compliance frameworks

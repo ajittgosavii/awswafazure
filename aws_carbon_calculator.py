@@ -1,3 +1,4 @@
+import streamlit as st
 """
 AWS Carbon Footprint Calculator
 Calculates estimated CO2 emissions from AWS resource usage
@@ -56,6 +57,7 @@ class CarbonFootprintCalculator:
         self.session = session
         self.account_id = session.client('sts').get_caller_identity()['Account']
     
+    @st.cache_data(ttl=600)
     def calculate_ec2_emissions(self, region: str = 'us-east-1', days: int = 30) -> Dict:
         """Calculate CO2 emissions from EC2 instances"""
         try:
@@ -324,6 +326,7 @@ class CarbonFootprintCalculator:
         self.session = session
         self.account_id = session.client('sts').get_caller_identity()['Account']
     
+    @st.cache_data(ttl=600)
     def calculate_ec2_emissions(self, region: str = 'us-east-1', days: int = 30) -> Dict:
         """Calculate CO2 emissions from EC2 instances"""
         try:
@@ -533,6 +536,7 @@ class CarbonFootprintCalculator:
         return recommendations
 
 
+@st.cache_data(ttl=600)  # 10 min cache for Live mode
 def get_carbon_data_from_aws(session: boto3.Session, regions: List[str] = None) -> Dict:
     """
     Main function to get carbon footprint data from AWS

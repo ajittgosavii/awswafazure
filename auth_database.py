@@ -177,6 +177,7 @@ class DatabaseManager:
         finally:
             session.close()
     
+    @st.cache_data(ttl=60)
     def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user by ID"""
         session = self.get_session()
@@ -245,6 +246,7 @@ class DatabaseManager:
         finally:
             session.close()
     
+    @st.cache_data(ttl=60)
     def get_all_users(self, active_only: bool = True) -> List[Dict[str, Any]]:
         """Get all users"""
         session = self.get_session()

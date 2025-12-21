@@ -1,3 +1,4 @@
+import streamlit as st
 """
 AWS Budgets Integration
 Fetches budget data and utilization from AWS Budgets API
@@ -153,6 +154,7 @@ class AWSBudgetsManager:
         }
 
 
+@st.cache_data(ttl=300)  # 5 min cache for Live mode
 def get_budgets_from_aws(session: boto3.Session) -> Dict:
     """
     Main function to get budget data from AWS

@@ -183,6 +183,7 @@ def assume_role(
         st.error(f"❌ Failed to assume role: {str(e)}")
         return None
 
+@st.cache_resource(ttl=300)  # Cache AWS session for 5 minutes - CRITICAL for Live mode
 def get_aws_session(credentials: Optional[AWSCredentials] = None):
     """
     Create boto3 session from credentials.
@@ -316,6 +317,7 @@ def get_aws_session(credentials: Optional[AWSCredentials] = None):
         logger.error(f"Failed to create session: {e}")
         return None
 
+@st.cache_data(ttl=60)  # Cache for 1 minute
 def test_aws_connection(session) -> Tuple[bool, str, Dict]:
     """Test AWS connection and return identity info"""
     try:

@@ -21,7 +21,8 @@ class EKSService:
         self.ec2_client = session.client('ec2', region_name=region)
         self.iam_client = session.client('iam')
     
-    def list_clusters(_self) -> Dict:
+    @st.cache_data(ttl=300)
+def list_clusters(_self) -> Dict:
         """List all EKS clusters"""
         try:
             clusters = []

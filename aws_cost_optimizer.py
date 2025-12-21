@@ -1,3 +1,4 @@
+import streamlit as st
 """
 AWS Cost Optimizer
 Fetches real cost optimization recommendations from AWS Cost Explorer
@@ -23,6 +24,7 @@ class AWSCostOptimizer:
         except:
             pass  # Compute Optimizer might not be enabled
     
+    @st.cache_data(ttl=900)
     def get_rightsizing_recommendations(self) -> List[Dict]:
         """Get EC2 rightsizing recommendations from Cost Explorer"""
         recommendations = []
@@ -205,6 +207,7 @@ class AWSCostOptimizer:
         
         return recommendations
     
+    @st.cache_data(ttl=900)
     def get_all_recommendations(self) -> List[Dict]:
         """Get all cost optimization recommendations"""
         all_recommendations = []
@@ -230,6 +233,7 @@ class AWSCostOptimizer:
         return all_recommendations[:10]  # Top 10
 
 
+@st.cache_data(ttl=900)  # 15 min cache - recommendations rarely change
 def get_cost_optimization_recommendations(session: boto3.Session) -> List[Dict]:
     """
     Main function to get cost optimization recommendations from AWS
