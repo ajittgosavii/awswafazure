@@ -29,8 +29,11 @@ class EKSSVGDiagramGenerator:
     """Generate SVG diagrams for EKS architectures"""
     
     @staticmethod
-    def generate_cluster_diagram(config: Dict) -> str:
+    @st.cache_data(ttl=3600)  # Cache SVG for 1 hour
+    def generate_cluster_diagram(config_json: str) -> str:
         """Generate an SVG diagram of the EKS cluster architecture"""
+        # Parse JSON config (needed for caching - dicts aren't hashable)
+        config = json.loads(config_json) if isinstance(config_json, str) else config_json
         
         project_name = config.get('project_name', 'my-eks-cluster')
         region = config.get('region', 'us-east-1')
@@ -275,6 +278,297 @@ class EKSUseCases:
             "icon": "🌐"
         }
     }
+
+
+# ============================================================================
+# NLP PARSER FOR AI-POWERED REQUIREMENTS
+# ============================================================================
+
+class EKSNLPParser:
+    """Parse natural language requirements into EKS configuration"""
+    
+    # Keywords for detection
+    REGION_KEYWORDS = {
+        'us-east-1': ['us-east-1', 'virginia', 'n. virginia', 'us east', 'east coast'],
+        'us-east-2': ['us-east-2', 'ohio'],
+        'us-west-1': ['us-west-1', 'n. california', 'california'],
+        'us-west-2': ['us-west-2', 'oregon', 'west coast'],
+        'eu-west-1': ['eu-west-1', 'ireland', 'dublin', 'europe west'],
+        'eu-central-1': ['eu-central-1', 'frankfurt', 'germany', 'europe central'],
+        'ap-southeast-1': ['ap-southeast-1', 'singapore', 'asia pacific', 'southeast asia'],
+        'ap-northeast-1': ['ap-northeast-1', 'tokyo', 'japan'],
+    }
+    
+    ENVIRONMENT_KEYWORDS = {
+        'production': ['production', 'prod', 'live', 'critical', 'enterprise'],
+        'staging': ['staging', 'stage', 'uat', 'pre-prod', 'preprod'],
+        'development': ['development', 'dev', 'test', 'testing', 'sandbox', 'experimental'],
+        'dr': ['dr', 'disaster recovery', 'backup', 'failover'],
+    }
+    
+    COMPLIANCE_KEYWORDS = {
+        'PCI-DSS': ['pci', 'pci-dss', 'payment card', 'credit card'],
+        'HIPAA': ['hipaa', 'healthcare', 'health data', 'phi', 'medical'],
+        'SOC2': ['soc2', 'soc 2', 'type 2', 'audit'],
+        'GDPR': ['gdpr', 'european', 'eu data', 'privacy'],
+        'ISO27001': ['iso 27001', 'iso27001', 'information security'],
+        'FedRAMP': ['fedramp', 'federal', 'government', 'gov'],
+    }
+    
+    WORKLOAD_KEYWORDS = {
+        'Web/API': ['web', 'api', 'rest', 'graphql', 'http', 'frontend', 'backend'],
+        'ML/AI': ['ml', 'machine learning', 'ai', 'artificial intelligence', 'training', 'inference', 'gpu', 'model'],
+        'Batch Processing': ['batch', 'job', 'cron', 'scheduled', 'etl', 'data processing'],
+        'Databases': ['database', 'db', 'postgres', 'mysql', 'mongodb', 'redis', 'stateful'],
+        'Event Processing': ['event', 'kafka', 'streaming', 'real-time', 'realtime', 'queue', 'message'],
+    }
+    
+    INSTANCE_RECOMMENDATIONS = {
+        'general': 'm6i.large',
+        'compute': 'c6i.large',
+        'memory': 'r6i.large',
+        'gpu': 'g5.xlarge',
+        'arm': 'm6g.large',
+        'cost': 't3.large',
+    }
+    
+    @staticmethod
+    def parse_requirements(text: str) -> Dict:
+        """Parse natural language text into EKS configuration"""
+        text_lower = text.lower()
+        config = {}
+        
+        # Parse region
+        config['region'] = EKSNLPParser._extract_region(text_lower)
+        
+        # Parse environment
+        config['environment'] = EKSNLPParser._extract_environment(text_lower)
+        
+        # Parse compliance requirements
+        config['compliance'] = EKSNLPParser._extract_compliance(text_lower)
+        
+        # Parse workload types
+        config['workload_types'] = EKSNLPParser._extract_workloads(text_lower)
+        
+        # Parse budget
+        config['monthly_budget'] = EKSNLPParser._extract_budget(text_lower)
+        
+        # Parse pod count
+        pod_count = EKSNLPParser._extract_pod_count(text_lower)
+        
+        # Parse service count
+        service_count = EKSNLPParser._extract_number(text_lower, ['services', 'microservices', 'applications', 'apps'])
+        
+        # Parse AZ requirements
+        az_count = EKSNLPParser._extract_az_count(text_lower, config['environment'])
+        config['availability_zones'] = [f"{config['region']}{az}" for az in ['a', 'b', 'c'][:az_count]]
+        
+        # Determine instance type based on workloads
+        instance_type = EKSNLPParser._recommend_instance_type(config['workload_types'], text_lower)
+        
+        # Determine capacity type
+        capacity_type = 'SPOT' if any(kw in text_lower for kw in ['spot', 'cost saving', 'budget', 'cheap']) else 'ON_DEMAND'
+        if config['environment'] == 'production' and 'spot' not in text_lower:
+            capacity_type = 'ON_DEMAND'
+        
+        # Calculate node sizing
+        min_nodes, max_nodes = EKSNLPParser._calculate_node_sizing(pod_count, service_count, config['environment'])
+        
+        # Create node group config
+        config['node_groups'] = [{
+            'name': 'primary',
+            'instance_type': instance_type,
+            'min_size': min_nodes,
+            'max_size': max_nodes,
+            'desired_size': min_nodes,
+            'capacity_type': capacity_type
+        }]
+        
+        # Add GPU node group if ML workload
+        if 'ML/AI' in config.get('workload_types', []):
+            config['node_groups'].append({
+                'name': 'gpu',
+                'instance_type': 'g5.xlarge',
+                'min_size': 0,
+                'max_size': 5,
+                'desired_size': 0,
+                'capacity_type': 'ON_DEMAND'
+            })
+        
+        # Determine add-ons based on requirements
+        config['addons'] = EKSNLPParser._recommend_addons(config)
+        
+        # Generate cluster name
+        config['project_name'] = EKSNLPParser._generate_cluster_name(config)
+        
+        return config
+    
+    @staticmethod
+    def _extract_region(text: str) -> str:
+        """Extract AWS region from text"""
+        for region, keywords in EKSNLPParser.REGION_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                return region
+        return 'us-east-1'  # Default
+    
+    @staticmethod
+    def _extract_environment(text: str) -> str:
+        """Extract environment from text"""
+        for env, keywords in EKSNLPParser.ENVIRONMENT_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                return env
+        return 'production'  # Default
+    
+    @staticmethod
+    def _extract_compliance(text: str) -> List[str]:
+        """Extract compliance requirements"""
+        compliance = []
+        for framework, keywords in EKSNLPParser.COMPLIANCE_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                compliance.append(framework)
+        return compliance
+    
+    @staticmethod
+    def _extract_workloads(text: str) -> List[str]:
+        """Extract workload types"""
+        workloads = []
+        for workload, keywords in EKSNLPParser.WORKLOAD_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                workloads.append(workload)
+        return workloads if workloads else ['Web/API']
+    
+    @staticmethod
+    def _extract_budget(text: str) -> int:
+        """Extract monthly budget"""
+        import re
+        # Look for dollar amounts
+        patterns = [
+            r'\$\s*([\d,]+)\s*(?:k|K)?\s*(?:/month|per month|monthly)?',
+            r'([\d,]+)\s*(?:k|K)?\s*(?:dollars?|usd)\s*(?:/month|per month|monthly)?',
+            r'budget\s*(?:of|is|:)?\s*\$?\s*([\d,]+)\s*(?:k|K)?',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                value = match.group(1).replace(',', '')
+                value = int(float(value))
+                # Handle 'k' notation
+                if 'k' in text[match.start():match.end()].lower():
+                    value *= 1000
+                return value
+        
+        return 5000  # Default
+    
+    @staticmethod
+    def _extract_pod_count(text: str) -> int:
+        """Extract expected pod count"""
+        import re
+        patterns = [
+            r'(\d+)\s*pods?',
+            r'peak\s*(?:of|around|about)?\s*(\d+)',
+            r'around\s*(\d+)\s*pods?',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                return int(match.group(1))
+        
+        return 100  # Default
+    
+    @staticmethod
+    def _extract_number(text: str, keywords: List[str]) -> int:
+        """Extract number associated with keywords"""
+        import re
+        for kw in keywords:
+            patterns = [
+                rf'(\d+)\s*{kw}',
+                rf'{kw}\s*(?:of|about|around)?\s*(\d+)',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, text)
+                if match:
+                    return int(match.group(1))
+        return 10  # Default
+    
+    @staticmethod
+    def _extract_az_count(text: str, environment: str) -> int:
+        """Extract AZ count preference"""
+        import re
+        # Look for explicit AZ mention
+        az_match = re.search(r'(\d+)\s*(?:az|availability zone)', text)
+        if az_match:
+            return min(3, max(1, int(az_match.group(1))))
+        
+        # Check for HA keywords
+        if any(kw in text for kw in ['high availability', 'ha', 'multi-az', 'highly available']):
+            return 3
+        
+        # Check for single AZ
+        if any(kw in text for kw in ['single az', 'one az', 'cost saving']):
+            return 1
+        
+        # Default based on environment
+        return 3 if environment == 'production' else 2
+    
+    @staticmethod
+    def _recommend_instance_type(workloads: List[str], text: str) -> str:
+        """Recommend instance type based on workloads"""
+        if 'ML/AI' in workloads and 'gpu' in text:
+            return 'g5.xlarge'
+        elif 'ML/AI' in workloads:
+            return 'c6i.xlarge'
+        elif 'Databases' in workloads:
+            return 'r6i.large'
+        elif 'Event Processing' in workloads:
+            return 'c6i.large'
+        elif any(kw in text for kw in ['graviton', 'arm']):
+            return 'm6g.large'
+        elif any(kw in text for kw in ['cost', 'cheap', 'budget', 'small']):
+            return 't3.large'
+        else:
+            return 'm6i.large'
+    
+    @staticmethod
+    def _calculate_node_sizing(pod_count: int, service_count: int, environment: str) -> tuple:
+        """Calculate min/max node counts"""
+        # Assume ~30 pods per node for safety
+        pods_per_node = 30
+        min_nodes = max(3, int(pod_count / pods_per_node) + 1)
+        
+        # Add headroom for scaling
+        if environment == 'production':
+            max_nodes = min_nodes * 3
+        else:
+            max_nodes = min_nodes * 2
+        
+        return min_nodes, max_nodes
+    
+    @staticmethod
+    def _recommend_addons(config: Dict) -> List[str]:
+        """Recommend add-ons based on configuration"""
+        addons = ['vpc-cni', 'coredns', 'kube-proxy', 'aws-ebs-csi-driver']
+        
+        # Add observability
+        addons.append('aws-cloudwatch-observability')
+        
+        # Add ALB controller for web workloads
+        if 'Web/API' in config.get('workload_types', []):
+            addons.append('aws-load-balancer-controller')
+        
+        # Add EFS for stateful workloads
+        if 'Databases' in config.get('workload_types', []):
+            addons.append('aws-efs-csi-driver')
+        
+        return addons
+    
+    @staticmethod
+    def _generate_cluster_name(config: Dict) -> str:
+        """Generate a cluster name"""
+        env_prefix = config.get('environment', 'prod')[:4]
+        region_suffix = config.get('region', 'us-east-1').split('-')[1][:2]
+        return f"{env_prefix}-eks-{region_suffix}"
 
 
 # ============================================================================
@@ -681,36 +975,68 @@ class EKSSecurityHardening:
     
     @staticmethod
     def render():
-        """Render security hardening assessment"""
+        """Render security hardening assessment - optimized"""
         st.markdown("## 🔒 Security Hardening Assessment")
         st.markdown("Assess and improve your EKS cluster security posture")
         
-        # Interactive checklist
-        st.markdown("### ✅ Security Controls Checklist")
-        st.markdown("Check the controls you have already implemented:")
+        # Quick assessment option
+        assessment_mode = st.radio(
+            "Assessment Mode",
+            ["Quick Assessment", "Detailed Checklist"],
+            horizontal=True
+        )
         
-        total_controls = 0
-        implemented_controls = 0
-        critical_missing = []
-        
-        for category in EKSSecurityHardening.SECURITY_CONTROLS:
-            st.markdown(f"#### {category['category']}")
+        if assessment_mode == "Quick Assessment":
+            # Quick assessment with sliders
+            st.markdown("### 📊 Quick Security Assessment")
             
-            for control in category['controls']:
-                total_controls += 1
-                key = f"sec_{control['name'][:20]}"
-                
-                critical_badge = "🔴 CRITICAL" if control['critical'] else "🟡 Recommended"
-                is_implemented = st.checkbox(
-                    f"{control['name']} ({critical_badge})",
-                    key=key,
-                    value=control.get('implemented', False)
-                )
-                
-                if is_implemented:
-                    implemented_controls += 1
-                elif control['critical']:
-                    critical_missing.append(control['name'])
+            col1, col2 = st.columns(2)
+            with col1:
+                irsa_enabled = st.checkbox("IRSA Enabled", key="quick_irsa")
+                pss_enabled = st.checkbox("Pod Security Standards", key="quick_pss")
+                network_policies = st.checkbox("Network Policies", key="quick_np")
+            with col2:
+                secrets_encrypted = st.checkbox("Secrets Encryption", key="quick_secrets")
+                guardduty_enabled = st.checkbox("GuardDuty EKS", key="quick_gd")
+                logging_enabled = st.checkbox("Control Plane Logging", key="quick_log")
+            
+            implemented = sum([irsa_enabled, pss_enabled, network_policies, 
+                              secrets_encrypted, guardduty_enabled, logging_enabled])
+            score = int((implemented / 6) * 100)
+            
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            col1.metric("Security Score", f"{score}/100")
+            col2.metric("Controls Implemented", f"{implemented}/6")
+            
+            if score < 100:
+                st.warning("⚠️ Some critical controls are not implemented. Enable all controls for maximum security.")
+        
+        else:
+            # Detailed checklist in expanders
+            st.markdown("### ✅ Security Controls Checklist")
+            
+            total_controls = 0
+            implemented_controls = 0
+            critical_missing = []
+            
+            for category in EKSSecurityHardening.SECURITY_CONTROLS:
+                with st.expander(f"📁 {category['category']}", expanded=False):
+                    for control in category['controls']:
+                        total_controls += 1
+                        key = f"sec_{hash(control['name']) % 100000}"
+                        
+                        critical_badge = "🔴 CRITICAL" if control['critical'] else "🟡 Recommended"
+                        is_implemented = st.checkbox(
+                            f"{control['name']} ({critical_badge})",
+                            key=key,
+                            value=control.get('implemented', False)
+                        )
+                        
+                        if is_implemented:
+                            implemented_controls += 1
+                        elif control['critical']:
+                            critical_missing.append(control['name'])
         
         # Calculate score
         security_score = int((implemented_controls / total_controls) * 100)
@@ -806,32 +1132,22 @@ class EKSModernizationModuleRevamped:
     
     @staticmethod
     def render():
-        """Main render method"""
+        """Main render method - optimized for speed"""
         st.title("🚀 EKS Modernization & Architecture Hub")
         st.markdown("Design, migrate, optimize, and secure your Kubernetes workloads")
         
-        # Use case selection
-        st.markdown("### 🎯 What would you like to do?")
-        
-        use_cases = list(EKSUseCases.USE_CASES.keys())
-        cols = st.columns(len(use_cases))
-        
-        selected_use_case = st.session_state.get('eks_use_case', 'greenfield')
-        
-        for i, (key, uc) in enumerate(EKSUseCases.USE_CASES.items()):
-            with cols[i]:
-                if st.button(f"{uc['icon']}\n{uc['title'].split(' ', 1)[1]}", 
-                            key=f"uc_{key}",
-                            use_container_width=True,
-                            type="primary" if selected_use_case == key else "secondary"):
-                    st.session_state.eks_use_case = key
-                    st.rerun()
+        # Use case selection - optimized with radio buttons (faster than button grid)
+        selected = st.radio(
+            "🎯 What would you like to do?",
+            options=["greenfield", "migration", "optimization", "security", "multicluster"],
+            format_func=lambda x: EKSUseCases.USE_CASES[x]['title'],
+            horizontal=True,
+            key="eks_use_case_radio"
+        )
         
         st.markdown("---")
         
         # Render selected use case
-        selected = st.session_state.get('eks_use_case', 'greenfield')
-        
         if selected == 'greenfield':
             EKSModernizationModuleRevamped._render_greenfield_design()
         elif selected == 'migration':
@@ -871,9 +1187,16 @@ class EKSModernizationModuleRevamped:
     
     @staticmethod
     def _render_requirements_tab():
-        """Consolidated requirements tab (replaces Upload & Analyze + Requirements)"""
+        """Consolidated requirements tab with AI NLP + Manual options"""
         st.markdown("### 📝 Define Your Requirements")
-        st.markdown("*Configure your cluster requirements in one place*")
+        
+        # Input mode selection
+        input_mode = st.radio(
+            "Choose input method:",
+            ["🤖 AI Assistant (Describe in plain English)", "⚙️ Manual Configuration"],
+            horizontal=True,
+            key="eks_input_mode"
+        )
         
         # Initialize session state
         if 'eks_config' not in st.session_state:
@@ -889,20 +1212,132 @@ class EKSModernizationModuleRevamped:
         
         config = st.session_state.eks_config
         
+        if "AI Assistant" in input_mode:
+            # AI NLP Input Mode
+            EKSModernizationModuleRevamped._render_ai_requirements_input(config)
+        else:
+            # Manual Configuration Mode
+            EKSModernizationModuleRevamped._render_manual_requirements_input(config)
+    
+    @staticmethod
+    def _render_ai_requirements_input(config: Dict):
+        """AI-powered natural language requirements input"""
+        st.markdown("#### 🤖 Describe Your EKS Requirements")
+        st.markdown("*Tell me about your workload in plain English, and I'll configure the cluster for you.*")
+        
+        # Example prompts
+        with st.expander("💡 Example prompts you can use", expanded=False):
+            st.markdown("""
+            **Production Web Application:**
+            > "I need a production EKS cluster in us-west-2 for running 20 microservices. 
+            > We expect around 500 pods at peak. Budget is $8000/month. 
+            > We need high availability across 3 AZs and PCI-DSS compliance."
+            
+            **ML/AI Workload:**
+            > "Set up a cluster for machine learning workloads with GPU support. 
+            > We'll run training jobs and inference services. Need spot instances to save costs.
+            > Region should be us-east-1, budget around $15000/month."
+            
+            **Development Environment:**
+            > "Create a small dev cluster for our team of 5 developers. 
+            > We run about 10 services, nothing critical. Keep costs under $500/month.
+            > Single AZ is fine, us-east-1 region."
+            
+            **Event-Driven Architecture:**
+            > "We need a cluster for event processing with Kafka and real-time analytics.
+            > High throughput, memory-optimized instances. Production environment in eu-west-1.
+            > Must be GDPR compliant. Budget is $12000/month."
+            """)
+        
+        # Text input for requirements
+        requirements_text = st.text_area(
+            "Describe your requirements:",
+            height=150,
+            placeholder="Example: I need a production EKS cluster for 30 microservices in us-west-2. We expect 800 pods at peak load. Need high availability with 3 AZs. Budget is $10,000/month. We need HIPAA compliance for healthcare data.",
+            key="eks_nlp_input"
+        )
+        
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            analyze_button = st.button("🔍 Analyze & Configure", type="primary", use_container_width=True)
+        
+        if analyze_button and requirements_text:
+            with st.spinner("🤖 Analyzing your requirements..."):
+                # Parse requirements using NLP
+                parsed_config = EKSNLPParser.parse_requirements(requirements_text)
+                
+                # Update config
+                for key, value in parsed_config.items():
+                    if value is not None:
+                        config[key] = value
+                
+                st.session_state.eks_config = config
+                st.success("✅ Requirements analyzed! Configuration updated.")
+        
+        # Show parsed configuration
+        if requirements_text or st.session_state.get('eks_nlp_analyzed'):
+            st.markdown("---")
+            st.markdown("#### 📊 Extracted Configuration")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown("**Basic Settings**")
+                st.write(f"🏷️ Cluster: `{config['project_name']}`")
+                st.write(f"🌍 Region: `{config['region']}`")
+                st.write(f"🏢 Environment: `{config['environment']}`")
+                st.write(f"📍 AZs: `{len(config['availability_zones'])}`")
+            
+            with col2:
+                st.markdown("**Compute**")
+                if config.get('node_groups'):
+                    ng = config['node_groups'][0]
+                    st.write(f"💻 Instance: `{ng.get('instance_type', 'm6i.large')}`")
+                    st.write(f"📊 Nodes: `{ng.get('min_size', 3)}-{ng.get('max_size', 20)}`")
+                    st.write(f"🏷️ Capacity: `{ng.get('capacity_type', 'ON_DEMAND')}`")
+                else:
+                    st.write("💻 Instance: `m6i.large`")
+                    st.write("📊 Nodes: `3-20`")
+            
+            with col3:
+                st.markdown("**Budget & Compliance**")
+                st.write(f"💰 Budget: `${config['monthly_budget']:,}/month`")
+                if config.get('compliance'):
+                    st.write(f"📜 Compliance: `{', '.join(config['compliance'])}`")
+                st.write(f"🔌 Add-ons: `{len(config.get('addons', []))}`")
+            
+            # Allow manual adjustments
+            with st.expander("✏️ Fine-tune configuration", expanded=False):
+                EKSModernizationModuleRevamped._render_manual_requirements_input(config)
+        
+        # Save button
+        st.markdown("---")
+        if st.button("✅ Save Configuration & Generate Architecture", type="primary", use_container_width=True, key="save_ai"):
+            st.session_state.eks_config = config
+            st.session_state.eks_config_saved = True
+            st.success("✅ Configuration saved! Go to **Architecture & Diagram** tab to see your cluster design.")
+    
+    @staticmethod
+    def _render_manual_requirements_input(config: Dict):
+        """Manual configuration form for EKS requirements"""
+        st.markdown("*Configure your cluster settings manually*")
+        
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("#### Basic Configuration")
-            config['project_name'] = st.text_input("Cluster Name", config['project_name'])
+            config['project_name'] = st.text_input("Cluster Name", config['project_name'], key="manual_cluster_name")
             config['environment'] = st.selectbox(
                 "Environment",
                 ["development", "staging", "production", "dr"],
-                index=["development", "staging", "production", "dr"].index(config['environment'])
+                index=["development", "staging", "production", "dr"].index(config['environment']),
+                key="manual_env"
             )
             config['region'] = st.selectbox(
                 "AWS Region",
                 ["us-east-1", "us-east-2", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1"],
-                index=0
+                index=0,
+                key="manual_region"
             )
             
             # Update AZs based on region
@@ -910,19 +1345,21 @@ class EKSModernizationModuleRevamped:
             config['availability_zones'] = st.multiselect(
                 "Availability Zones",
                 az_options,
-                default=az_options if config['environment'] == 'production' else az_options[:2]
+                default=az_options if config['environment'] == 'production' else az_options[:2],
+                key="manual_azs"
             )
         
         with col2:
             st.markdown("#### Workload Requirements")
-            num_services = st.number_input("Number of Services", 1, 500, 10)
-            peak_pods = st.number_input("Peak Pod Count", 10, 10000, 100)
-            config['monthly_budget'] = st.number_input("Monthly Budget ($)", 0, 1000000, config['monthly_budget'])
+            num_services = st.number_input("Number of Services", 1, 500, 10, key="manual_services")
+            peak_pods = st.number_input("Peak Pod Count", 10, 10000, 100, key="manual_pods")
+            config['monthly_budget'] = st.number_input("Monthly Budget ($)", 0, 1000000, config['monthly_budget'], key="manual_budget")
             
             workload_types = st.multiselect(
                 "Workload Types",
                 ["Web/API", "Batch Processing", "ML/AI", "Databases", "Event Processing"],
-                default=["Web/API"]
+                default=["Web/API"],
+                key="manual_workloads"
             )
         
         # Node group configuration
@@ -933,24 +1370,27 @@ class EKSModernizationModuleRevamped:
         with col1:
             compute_strategy = st.selectbox(
                 "Compute Strategy",
-                ["Karpenter (Recommended)", "Managed Node Groups", "Fargate"]
+                ["Karpenter (Recommended)", "Managed Node Groups", "Fargate"],
+                key="manual_compute"
             )
         
         with col2:
             instance_type = st.selectbox(
                 "Primary Instance Type",
                 ["m6i.large", "m6i.xlarge", "m6i.2xlarge", "m6g.large (Graviton)", 
-                 "c6i.large", "c6i.xlarge", "r6i.large", "t3.large"]
+                 "c6i.large", "c6i.xlarge", "r6i.large", "t3.large"],
+                key="manual_instance"
             )
         
         with col3:
             capacity_type = st.selectbox(
                 "Capacity Type",
-                ["Mixed (Spot + On-Demand)", "Spot Only", "On-Demand Only"]
+                ["Mixed (Spot + On-Demand)", "Spot Only", "On-Demand Only"],
+                key="manual_capacity"
             )
         
-        min_nodes = st.slider("Min Nodes", 1, 50, 3)
-        max_nodes = st.slider("Max Nodes", min_nodes, 200, 20)
+        min_nodes = st.slider("Min Nodes", 1, 50, 3, key="manual_min_nodes")
+        max_nodes = st.slider("Max Nodes", min_nodes, 200, 20, key="manual_max_nodes")
         
         # Save node group config
         config['node_groups'] = [{
@@ -980,7 +1420,8 @@ class EKSModernizationModuleRevamped:
             "Select Add-ons",
             list(addon_options.keys()),
             default=['vpc-cni', 'coredns', 'kube-proxy', 'aws-ebs-csi-driver', 'aws-load-balancer-controller'],
-            format_func=lambda x: addon_options[x]
+            format_func=lambda x: addon_options[x],
+            key="manual_addons"
         )
         config['addons'] = selected_addons
         
@@ -1012,7 +1453,7 @@ class EKSModernizationModuleRevamped:
         for rec in recommendations:
             st.info(rec)
         
-        if st.button("✅ Save Configuration & Generate Architecture", type="primary", use_container_width=True):
+        if st.button("✅ Save Configuration & Generate Architecture", type="primary", use_container_width=True, key="save_manual"):
             st.session_state.eks_config_saved = True
             st.success("Configuration saved! Go to Architecture tab to see your diagram.")
     
@@ -1027,8 +1468,8 @@ class EKSModernizationModuleRevamped:
         
         config = st.session_state.eks_config
         
-        # Generate SVG diagram
-        svg_content = EKSSVGDiagramGenerator.generate_cluster_diagram(config)
+        # Generate SVG diagram (pass JSON for caching)
+        svg_content = EKSSVGDiagramGenerator.generate_cluster_diagram(json.dumps(config))
         
         # Display the SVG
         st.markdown("#### Your EKS Architecture")
