@@ -1340,7 +1340,15 @@ class FinOpsEnterpriseModule:
             return
         
         # We have carbon data - render it!
-        st.success("✅ Carbon footprint calculated from your AWS resource usage")
+        account_count = carbon_data.get('account_count', 0)
+        if account_count > 1:
+            st.success(f"✅ Carbon footprint calculated from {account_count} AWS accounts in your organization")
+        else:
+            st.success("✅ Carbon footprint calculated from your AWS resource usage")
+        
+        total_emissions = carbon_data.get('total_emissions_kg', 0)
+        sustainability_score = carbon_data.get('sustainability_score', 0)
+        renewable_pct = carbon_data.get('renewable_energy_pct', 0)
         
         # Top metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -1348,98 +1356,233 @@ class FinOpsEnterpriseModule:
         with col1:
             st.metric(
                 "Total CO2 Emissions",
-                f"{carbon_data['total_emissions_kg']:,.0f} kg",
-                delta="-12% vs last month",
-                delta_color="inverse"
+                f"{total_emissions:,.2f} kg",
+                delta=None
             )
         
         with col2:
-            trees_equivalent = carbon_data['total_emissions_kg'] / 21
-            st.metric("Trees to Offset", f"{trees_equivalent:,.0f} trees")
+            st.metric(
+                "Sustainability Score",
+                f"{sustainability_score:.0f}/100",
+                delta=None
+            )
         
         with col3:
-            total_saved = sum(r['emissions_saved_kg'] for r in carbon_data['recommendations'])
             st.metric(
-                "Potential Reduction",
-                f"{total_saved:,.0f} kg CO2",
-                delta=f"{(total_saved/carbon_data['total_emissions_kg']*100):.0f}% opportunity"
+                "Renewable Energy",
+                f"{renewable_pct:.0f}%",
+                delta=None
             )
         
         with col4:
-            km_driven = carbon_data['total_emissions_kg'] * 2.2
-            st.metric("Driving Equivalent", f"{km_driven:,.0f} km")
+            if account_count > 1:
+                st.metric(
+                    "AWS Accounts",
+                    f"{account_count}",
+                    delta=None
+                )
+            else:
+                trees_equivalent = total_emissions / 21 if total_emissions > 0 else 0
+                st.metric("Trees to Offset", f"{trees_equivalent:,.0f} trees")
         
         st.markdown("---")
+        
+        # Multi-account breakdown (if available)
+        emissions_by_account = carbon_data.get('emissions_by_account', {})
+        if emissions_by_account and len(emissions_by_account) > 1:
+            st.markdown("### 📊 Emissions by AWS Account")
+            
+            account_data = [
+                {
+                    'Account': k,
+                    'Emissions (kg)': v,
+                    'Percentage': f"{(v / total_emissions * 100):.1f}%" if total_emissions > 0 else "0%"
+                }
+                for k, v in emissions_by_account.items()
+                if v > 0
+            ]
+            
+            if account_data:
+                account_df = pd.DataFrame(account_data).sort_values('Emissions (kg)', ascending=False)
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    fig_accounts = px.bar(
+                        account_df,
+                        x='Account',
+                        y='Emissions (kg)',
+                        title='Carbon Emissions by Account',
+                        color='Emissions (kg)',
+                        color_continuous_scale='Reds',
+                        text='Emissions (kg)'
+                    )
+                    fig_accounts.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                    st.plotly_chart(fig_accounts, use_container_width=True)
+                
+                with col2:
+                    st.dataframe(account_df, use_container_width=True, hide_index=True)
+            
+            st.markdown("---")
         
         # Emissions by service
         st.markdown("### 📊 Emissions by Service")
         
-        service_emissions = pd.DataFrame([
-            {
-                'Service': service,
-                'Cost ($)': data['cost'],
-                'Energy (kWh)': data['energy_kwh'],
-                'CO2 (kg)': data['emissions_kg']
-            }
-            for service, data in carbon_data['by_service'].items()
-        ]).sort_values('CO2 (kg)', ascending=False)
+        emissions_by_service = carbon_data.get('emissions_by_service', carbon_data.get('by_service', {}))
         
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            fig = px.bar(
-                service_emissions,
-                x='Service',
-                y='CO2 (kg)',
-                title='Carbon Emissions by Service',
-                color='CO2 (kg)',
-                color_continuous_scale='Greens',
-                text='CO2 (kg)'
-            )
-            fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            st.dataframe(service_emissions, use_container_width=True, hide_index=True)
+        if emissions_by_service:
+            # Check if this is demo data format or real data format
+            if isinstance(list(emissions_by_service.values())[0], dict):
+                # Demo data format (has cost, energy_kwh, emissions_kg)
+                service_emissions = pd.DataFrame([
+                    {
+                        'Service': service,
+                        'Cost ($)': data['cost'],
+                        'Energy (kWh)': data['energy_kwh'],
+                        'CO2 (kg)': data['emissions_kg']
+                    }
+                    for service, data in emissions_by_service.items()
+                ]).sort_values('CO2 (kg)', ascending=False)
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    fig = px.bar(
+                        service_emissions,
+                        x='Service',
+                        y='CO2 (kg)',
+                        title='Carbon Emissions by Service',
+                        color='CO2 (kg)',
+                        color_continuous_scale='Greens',
+                        text='CO2 (kg)'
+                    )
+                    fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    st.dataframe(service_emissions, use_container_width=True, hide_index=True)
+            else:
+                # Real data format (simple service: emissions_kg dict)
+                service_data = [
+                    {
+                        'Service': service,
+                        'Emissions (kg)': emissions,
+                        'Percentage': f"{(emissions / total_emissions * 100):.1f}%" if total_emissions > 0 else "0%"
+                    }
+                    for service, emissions in emissions_by_service.items()
+                    if emissions > 0
+                ]
+                
+                if service_data:
+                    service_df = pd.DataFrame(service_data).sort_values('Emissions (kg)', ascending=False)
+                    
+                    col1, col2 = st.columns([2, 1])
+                    
+                    with col1:
+                        fig = px.bar(
+                            service_df,
+                            x='Service',
+                            y='Emissions (kg)',
+                            title='Carbon Emissions by Service',
+                            color='Emissions (kg)',
+                            color_continuous_scale='Greens',
+                            text='Emissions (kg)'
+                        )
+                        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col2:
+                        st.dataframe(service_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No service-level emissions data available")
+        else:
+            st.info("No service-level emissions data available")
         
         # Regional carbon intensity
         st.markdown("---")
         st.markdown("### 🌍 Regional Carbon Intensity")
         
-        region_emissions = pd.DataFrame([
-            {
-                'Region': region,
-                'Carbon Intensity': data['carbon_intensity'],
-                'Rating': data['rating']
-            }
-            for region, data in carbon_data['by_region'].items()
-        ]).sort_values('Carbon Intensity')
+        emissions_by_region = carbon_data.get('emissions_by_region', carbon_data.get('by_region', {}))
         
-        def rating_color(rating):
-            return '🟢' if rating == 'Low' else '🟡' if rating == 'Medium' else '🔴'
+        if emissions_by_region:
+            # Check if this is demo data format or real data format
+            if isinstance(list(emissions_by_region.values())[0], dict):
+                # Demo data format
+                region_emissions = pd.DataFrame([
+                    {
+                        'Region': region,
+                        'Carbon Intensity': data['carbon_intensity'],
+                        'Rating': data['rating']
+                    }
+                    for region, data in emissions_by_region.items()
+                ]).sort_values('Carbon Intensity')
+                
+                def rating_color(rating):
+                    return '🟢' if rating == 'Low' else '🟡' if rating == 'Medium' else '🔴'
+                
+                region_emissions['Status'] = region_emissions['Rating'].apply(lambda x: f"{rating_color(x)} {x}")
+                
+                col1, col2 = st.columns([3, 2])
+                
+                with col1:
+                    fig = px.bar(
+                        region_emissions,
+                        x='Region',
+                        y='Carbon Intensity',
+                        title='Carbon Intensity by AWS Region (gCO2eq/kWh)',
+                        color='Rating',
+                        color_discrete_map={'Low': 'green', 'Medium': 'orange', 'High': 'red'},
+                        text='Carbon Intensity'
+                    )
+                    fig.update_traces(texttemplate='%{text}', textposition='outside')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    st.markdown("**🟢 Low Carbon Regions:**")
+                    low_carbon = region_emissions[region_emissions['Rating'] == 'Low']
+                    for _, row in low_carbon.iterrows():
+                        st.markdown(f"- **{row['Region']}**: {row['Carbon Intensity']} gCO2eq/kWh")
+            else:
+                # Real data format (region: emissions_kg)
+                region_data = [
+                    {
+                        'Region': region,
+                        'Emissions (kg)': emissions,
+                        'Percentage': f"{(emissions / total_emissions * 100):.1f}%" if total_emissions > 0 else "0%"
+                    }
+                    for region, emissions in emissions_by_region.items()
+                    if emissions > 0
+                ]
+                
+                if region_data:
+                    region_df = pd.DataFrame(region_data).sort_values('Emissions (kg)', ascending=False)
+                    
+                    col1, col2 = st.columns([2, 1])
+                    
+                    with col1:
+                        fig = px.bar(
+                            region_df,
+                            x='Region',
+                            y='Emissions (kg)',
+                            title='Carbon Emissions by Region',
+                            color='Emissions (kg)',
+                            color_continuous_scale='Reds',
+                            text='Emissions (kg)'
+                        )
+                        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col2:
+                        st.dataframe(region_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No regional emissions data available")
         
-        region_emissions['Status'] = region_emissions['Rating'].apply(lambda x: f"{rating_color(x)} {x}")
-        
-        col1, col2 = st.columns([3, 2])
-        
-        with col1:
-            fig = px.bar(
-                region_emissions,
-                x='Region',
-                y='Carbon Intensity',
-                title='Carbon Intensity by AWS Region (gCO2eq/kWh)',
-                color='Rating',
-                color_discrete_map={'Low': 'green', 'Medium': 'orange', 'High': 'red'},
-                text='Carbon Intensity'
-            )
-            fig.update_traces(texttemplate='%{text}', textposition='outside')
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            st.markdown("**🟢 Low Carbon Regions:**")
-            low_carbon = region_emissions[region_emissions['Rating'] == 'Low']
-            for _, row in low_carbon.iterrows():
-                st.markdown(f"- **{row['Region']}**: {row['Carbon Intensity']} gCO2eq/kWh")
+        # Recommendations
+        if carbon_data.get('recommendations'):
+            st.markdown("---")
+            st.markdown("### 💡 Carbon Reduction Recommendations")
+            for i, rec in enumerate(carbon_data['recommendations'][:5], 1):
+                st.markdown(f"{i}. {rec}")
     
     @staticmethod
     def _render_ai_insights(ai_available):
