@@ -381,7 +381,7 @@ def render_header():
 # SIDEBAR
 # ============================================================================
 
-@st.fragment
+#@st.fragment  # Disabled - causes context issues
 def render_sidebar():
     """Render sidebar with AWS connection status and mode toggle"""
     
@@ -590,7 +590,7 @@ def render_sidebar():
 # AWS CONNECTOR TAB
 # ============================================================================
 
-@st.fragment
+#@st.fragment  # Disabled - causes context issues
 def render_aws_connector_tab():
     """AWS Connector for Single/Multi-Account WAF Scanning"""
     
@@ -1395,7 +1395,7 @@ def render_multi_account_connector():
 # WAF SCANNER TAB
 # ============================================================================
 
-@st.fragment
+#@st.fragment  # Disabled - causes context issues
 def render_waf_scanner_tab():
     """
     AI-Integrated WAF Scanner with Demo Mode Support
@@ -3004,7 +3004,7 @@ def display_multi_account_results(results):
 # LIGHTWEIGHT ADMIN PANEL - Firebase Realtime Database
 # ============================================================================
 
-@st.fragment
+#@st.fragment  # Disabled - causes context issues
 def render_admin_panel_firebase():
     """Lightweight Admin Panel using Firebase Realtime Database directly"""
     
