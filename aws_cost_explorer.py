@@ -155,3 +155,86 @@ class CostExplorerService:
                 'error': str(e),
                 'forecast': 0
             }
+    
+    def get_cost_by_account(_self, days: int = 30) -> Dict:
+        """
+        Get cost breakdown by linked account (for AWS Organizations)
+        This will show costs for all accounts in the organization
+        """
+        try:
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=days)
+            
+            response = _self.client.get_cost_and_usage(
+                TimePeriod={
+                    'Start': start_date.isoformat(),
+                    'End': end_date.isoformat()
+                },
+                Granularity='MONTHLY',
+                Metrics=['UnblendedCost'],
+                GroupBy=[
+                    {'Type': 'DIMENSION', 'Key': 'LINKED_ACCOUNT'}
+                ]
+            )
+            
+            costs_by_account = {}
+            account_names = {}  # Map account IDs to friendly names
+            
+            for result in response['ResultsByTime']:
+                for group in result['Groups']:
+                    account_id = group['Keys'][0]
+                    amount = float(group['Metrics']['UnblendedCost']['Amount'])
+                    
+                    if amount > 0:  # Only include accounts with costs
+                        costs_by_account[account_id] = costs_by_account.get(account_id, 0) + amount
+            
+            # Try to get account names from Organizations API
+            try:
+                org_client = _self.session.client('organizations', region_name='us-east-1')
+                accounts_response = org_client.list_accounts()
+                
+                for account in accounts_response['Accounts']:
+                    account_id = account['Id']
+                    account_name = account['Name']
+                    if account_id in costs_by_account:
+                        account_names[account_id] = f"{account_name} ({account_id})"
+            except Exception as org_error:
+                # If Organizations API not available, just use account IDs
+                st.warning(f"Could not fetch account names from Organizations API: {org_error}")
+                for account_id in costs_by_account.keys():
+                    account_names[account_id] = account_id
+            
+            # Create final dict with account names
+            costs_with_names = {}
+            for account_id, cost in costs_by_account.items():
+                name = account_names.get(account_id, account_id)
+                costs_with_names[name] = cost
+            
+            # Sort by cost descending
+            sorted_costs = dict(sorted(costs_with_names.items(), key=lambda x: x[1], reverse=True))
+            
+            return {
+                'success': True,
+                'costs': sorted_costs,
+                'total': sum(sorted_costs.values()),
+                'account_count': len(sorted_costs)
+            }
+            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            
+            # If this is not an Organizations account, return helpful message
+            if error_code == 'InvalidDimensionValue':
+                return {
+                    'success': False,
+                    'error': 'This account is not part of AWS Organizations or does not have linked accounts',
+                    'costs': {},
+                    'total': 0
+                }
+            
+            return {
+                'success': False,
+                'error': str(e),
+                'costs': {},
+                'total': 0
+            }
