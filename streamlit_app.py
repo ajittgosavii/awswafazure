@@ -172,21 +172,28 @@ except Exception as e:
 
 # Try new AI-powered Architecture Designer first, fallback to old module
 ARCHITECTURE_DESIGNER_AI = False
+ARCHITECTURE_DESIGNER_REVAMPED = False
 ArchitectureDesignerModule = None
 
 try:
-    from architecture_designer_ai import ArchitectureDesignerAI, render_architecture_designer_ai
+    # Try the new revamped use-case based designer first
+    from architecture_designer_revamped import ArchitectureDesignerRevamped, render_architecture_designer_revamped
     MODULE_STATUS['Architecture Designer'] = True
-    ARCHITECTURE_DESIGNER_AI = True
-except Exception as e:
+    ARCHITECTURE_DESIGNER_REVAMPED = True
+except Exception as e_revamped:
     try:
-        from modules_architecture_designer_waf import ArchitectureDesignerModule
+        from architecture_designer_ai import ArchitectureDesignerAI, render_architecture_designer_ai
         MODULE_STATUS['Architecture Designer'] = True
-        ARCHITECTURE_DESIGNER_AI = False
-    except Exception as e2:
-        MODULE_STATUS['Architecture Designer'] = False
-        MODULE_ERRORS['Architecture Designer'] = f"AI: {str(e)}, Legacy: {str(e2)}"
-        ARCHITECTURE_DESIGNER_AI = False
+        ARCHITECTURE_DESIGNER_AI = True
+    except Exception as e:
+        try:
+            from modules_architecture_designer_waf import ArchitectureDesignerModule
+            MODULE_STATUS['Architecture Designer'] = True
+            ARCHITECTURE_DESIGNER_AI = False
+        except Exception as e2:
+            MODULE_STATUS['Architecture Designer'] = False
+            MODULE_ERRORS['Architecture Designer'] = f"Revamped: {str(e_revamped)}, AI: {str(e)}, Legacy: {str(e2)}"
+            ARCHITECTURE_DESIGNER_AI = False
 
 # EKS Modernization Module - Legacy module removed for performance
 # AI-Enhanced EKS Architecture Wizard is now the only EKS module
@@ -3215,12 +3222,14 @@ def render_main_content():
         else:
             st.error("WAF Review module not available")
     
-    # Tab 4: Architecture Designer (AI-Powered)
+    # Tab 4: Architecture Designer (Revamped with Use Cases)
     with tabs[3]:
         if MODULE_STATUS.get('Architecture Designer'):
             try:
-                # Use AI-powered designer if available, otherwise fallback
-                if ARCHITECTURE_DESIGNER_AI:
+                # Use revamped use-case based designer first
+                if ARCHITECTURE_DESIGNER_REVAMPED:
+                    render_architecture_designer_revamped()
+                elif ARCHITECTURE_DESIGNER_AI:
                     render_architecture_designer_ai()
                 elif ArchitectureDesignerModule is not None:
                     ArchitectureDesignerModule.render()
