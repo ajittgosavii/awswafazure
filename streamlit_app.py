@@ -188,14 +188,9 @@ except Exception as e:
         MODULE_ERRORS['Architecture Designer'] = f"AI: {str(e)}, Legacy: {str(e2)}"
         ARCHITECTURE_DESIGNER_AI = False
 
-# EKS Modernization Module - Now replaced by AI-Enhanced EKS Architecture Wizard
-# Legacy module kept for backward compatibility but not used in tabs
-try:
-    from eks_modernization_module import EKSModernizationModule
-    MODULE_STATUS['EKS Modernization Legacy'] = True
-except Exception as e:
-    MODULE_STATUS['EKS Modernization Legacy'] = False
-    MODULE_ERRORS['EKS Modernization Legacy'] = str(e)
+# EKS Modernization Module - Legacy module removed for performance
+# AI-Enhanced EKS Architecture Wizard is now the only EKS module
+MODULE_STATUS['EKS Modernization Legacy'] = False  # Legacy removed
 
 try:
     from compliance_module import ComplianceModule
