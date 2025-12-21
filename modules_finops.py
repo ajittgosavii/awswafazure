@@ -727,9 +727,39 @@ def get_carbon_data() -> Dict:
         # Demo mode - return simulated carbon data
         return generate_carbon_footprint_data()
     else:
-        # Live mode - return empty dict (no real integration yet)
-        # This will trigger the UI to show setup instructions
-        return {}
+        # Live mode - calculate real carbon emissions
+        try:
+            from aws_connector import get_aws_session
+            from aws_carbon_calculator import get_carbon_data_from_aws
+            
+            # Get AWS session
+            session = get_aws_session()
+            
+            if not session:
+                st.warning("⚠️ No AWS session available for carbon calculation")
+                return {}
+            
+            st.info("🌱 Calculating carbon emissions from your AWS resources...")
+            
+            # Calculate carbon emissions
+            carbon_data = get_carbon_data_from_aws(session)
+            
+            if carbon_data.get('total_emissions_kg', 0) > 0:
+                st.success(f"✅ Calculated carbon footprint: {carbon_data['total_emissions_kg']:.2f} kg CO2e")
+            else:
+                st.info("💡 No significant carbon emissions detected in monitored resources")
+            
+            return carbon_data
+            
+        except Exception as e:
+            st.warning(f"⚠️ Could not calculate carbon emissions: {str(e)}")
+            st.info("""
+            💡 To enable carbon tracking, ensure you have:
+            - ec2:Describe* permissions
+            - s3:List* permissions
+            - cloudwatch:GetMetricStatistics permissions
+            """)
+            return {}
 
 # ============================================================================
 # MAIN FINOPS MODULE
@@ -1242,44 +1272,42 @@ class FinOpsEnterpriseModule:
             demo_mgr = DemoModeManager()
             
             if not demo_mgr.is_demo_mode:
-                # Live mode - Carbon tracking not available
+                # Live mode - show instructions to run setup script
                 st.warning("### ⚠️ Sustainability Tracking Not Configured")
                 
                 st.markdown("""
-                **Carbon emissions tracking** is not yet integrated with this platform.
+                **Carbon emissions tracking** can be set up automatically!
                 
-                ### 🌍 What is AWS Carbon Footprint Tracking?
+                ### 🚀 Quick Setup (Automated):
                 
-                Monitor and reduce the carbon emissions from your AWS cloud infrastructure by tracking:
-                - CO2 emissions by service (EC2, S3, RDS, etc.)
-                - Regional carbon intensity differences
-                - Month-over-month emission trends
-                - Sustainability recommendations
+                **Windows PowerShell:**
+                ```powershell
+                powershell -ExecutionPolicy Bypass -File setup-carbon-tracking.ps1
+                ```
                 
-                ### 🚀 How to Track Your Carbon Footprint:
+                **What it does:**
+                1. ✅ Creates IAM permissions for resource access
+                2. ✅ Enables AWS Compute Optimizer
+                3. ✅ Sets up CloudWatch metrics
+                4. ✅ Configures carbon calculation
                 
-                **Option 1: AWS Customer Carbon Footprint Tool**
-                1. Go to [AWS Billing Console](https://console.aws.amazon.com/billing/home#/account)
-                2. Navigate to **Customer Carbon Footprint Tool**
-                3. View your historical emissions data
-                4. Download detailed reports
+                ### 🌍 How Carbon Tracking Works:
                 
-                **Option 2: Future Platform Integration** (Coming Soon)
-                - Automated carbon calculation from your AWS usage
-                - Real-time sustainability metrics
-                - Carbon reduction recommendations
-                - Renewable energy migration suggestions
+                Your platform calculates carbon emissions by:
+                - **EC2 Instances**: Power consumption × Regional carbon intensity
+                - **S3 Storage**: Storage volume × Carbon per GB
+                - **RDS Databases**: Instance type × Running hours
+                - **Lambda**: Execution time × Memory allocation
                 
-                ### 💡 What You'll Get:
-                - ✅ Total CO2 emissions (kg)
-                - ✅ Emissions by AWS service
-                - ✅ Regional breakdown
-                - ✅ Month-over-month trends
-                - ✅ Sustainability score
-                - ✅ Renewable energy percentage
+                ### 💡 Regional Carbon Intensity:
+                - 🇸🇪 **Stockholm** (eu-north-1): 9 gCO2e/kWh - 95% renewable ✨
+                - 🇨🇦 **Montreal** (ca-central-1): 130 gCO2e/kWh - 80% renewable
+                - 🇫🇷 **Paris** (eu-west-3): 71 gCO2e/kWh
+                - 🇺🇸 **US East** (us-east-1): 416 gCO2e/kWh
+                - 🇦🇺 **Sydney** (ap-southeast-2): 564 gCO2e/kWh
                 
                 ### 🔄 For Now:
-                Switch to **Demo Mode** (sidebar) to see simulated carbon tracking in action.
+                Switch to **Demo Mode** to see simulated carbon tracking in action.
                 """)
                 
                 st.markdown("---")
@@ -1289,30 +1317,30 @@ class FinOpsEnterpriseModule:
                     st.info("""
                     **Carbon Reduction Tips:**
                     
-                    🌱 Use AWS regions with renewable energy
-                    🌱 Right-size your EC2 instances
-                    🌱 Use ARM-based Graviton processors
-                    🌱 Optimize storage (delete unused data)
-                    🌱 Use serverless when possible
+                    🌱 Migrate to low-carbon regions
+                    🌱 Use AWS Graviton (60% more efficient)
+                    🌱 Right-size your instances
+                    🌱 Delete unused resources
+                    🌱 Use auto-scaling
                     """)
                 
                 with col2:
                     st.success("""
                     **Low-Carbon AWS Regions:**
                     
-                    🇨🇦 Canada (Montreal) - 80% renewable
-                    🇧🇷 South America (São Paulo)
-                    🇸🇪 Europe (Stockholm)
-                    🇩🇪 Europe (Frankfurt)
-                    🇺🇸 US West (Oregon)
+                    🇸🇪 Stockholm (95% renewable)
+                    🇨🇦 Montreal (80% renewable)
+                    🇫🇷 Paris (85% renewable)
+                    🇧🇷 São Paulo (82% renewable)
+                    🇺🇸 Oregon (renewable energy)
                     """)
             else:
                 st.info("No carbon data available in demo mode")
             
             return
         
-        # We have carbon data - render normally
-        st.info("📊 Track and optimize your cloud carbon footprint for a sustainable future")
+        # We have carbon data - render it!
+        st.success("✅ Carbon footprint calculated from your AWS resource usage")
         
         # Top metrics
         col1, col2, col3, col4 = st.columns(4)
