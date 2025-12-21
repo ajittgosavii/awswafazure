@@ -593,6 +593,7 @@ def generate_demo_recommendations() -> List[Dict]:
 # MODE-AWARE DATA FETCHING
 # ============================================================================
 
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def get_cost_data(account_mgr=None) -> Dict:
     """
     Get cost data based on current mode (demo or live)
@@ -683,6 +684,7 @@ def get_cost_data(account_mgr=None) -> Dict:
                 'error': error_msg
             }
 
+@st.cache_data(ttl=900)  # Cache for 15 minutes
 def get_recommendations(account_mgr=None) -> List[Dict]:
     """
     Get recommendations based on current mode (demo or live)
@@ -717,6 +719,7 @@ def get_recommendations(account_mgr=None) -> List[Dict]:
             # Return empty list to show setup instructions
             return []
 
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def get_anomalies() -> List[Dict]:
     """
     Get cost anomalies based on current mode (demo or live)
@@ -733,6 +736,7 @@ def get_anomalies() -> List[Dict]:
         # This will trigger the UI to show setup instructions instead of dummy data
         return []
 
+@st.cache_data(ttl=600)  # Cache for 10 minutes
 def get_carbon_data() -> Dict:
     """
     Get carbon footprint data based on current mode (demo or live)
