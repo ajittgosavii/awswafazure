@@ -686,7 +686,7 @@ def get_cost_data(account_mgr=None) -> Dict:
 def get_recommendations(account_mgr=None) -> List[Dict]:
     """
     Get recommendations based on current mode (demo or live)
-    In live mode, could fetch real AWS Trusted Advisor / Compute Optimizer data
+    In live mode, fetches real AWS Cost Explorer / Compute Optimizer data
     In demo mode, returns simulated recommendations
     """
     demo_mgr = DemoModeManager()
@@ -695,9 +695,27 @@ def get_recommendations(account_mgr=None) -> List[Dict]:
         # Demo mode - return simulated recommendations
         return generate_demo_recommendations()
     else:
-        # Live mode - for now return demo recommendations
-        # TODO: Integrate with AWS Trusted Advisor / Compute Optimizer
-        return generate_demo_recommendations()
+        # Live mode - fetch real AWS cost optimization recommendations
+        try:
+            from aws_connector import get_aws_session
+            from aws_cost_optimizer import get_cost_optimization_recommendations
+            
+            # Get AWS session
+            session = get_aws_session()
+            
+            if not session:
+                # No AWS session - return empty list to show setup instructions
+                return []
+            
+            # Fetch real recommendations
+            recommendations = get_cost_optimization_recommendations(session)
+            
+            return recommendations if recommendations else []
+            
+        except Exception as e:
+            print(f"Error fetching cost optimization recommendations: {e}")
+            # Return empty list to show setup instructions
+            return []
 
 def get_anomalies() -> List[Dict]:
     """
@@ -1862,11 +1880,88 @@ class FinOpsEnterpriseModule:
         
         recommendations = get_recommendations()
         
+        # Check if we have recommendations
+        if not recommendations:
+            demo_mgr = DemoModeManager()
+            
+            if not demo_mgr.is_demo_mode:
+                # Live mode - show setup instructions
+                st.warning("### ⚠️ Cost Optimization Not Available")
+                
+                st.markdown("""
+                **AWS Cost Optimization recommendations** can be enabled in your AWS account.
+                
+                ### 🚀 What You'll Get:
+                
+                ✅ **EC2 Rightsizing** - Identify oversized instances  
+                ✅ **Reserved Instances** - Save up to 72% on compute  
+                ✅ **Savings Plans** - Flexible commitment-based discounts  
+                ✅ **Unused Resources** - Find orphaned EBS volumes  
+                ✅ **Storage Optimization** - S3 lifecycle recommendations  
+                
+                ### 📋 Required Permissions:
+                
+                ```json
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ce:GetRightsizingRecommendation",
+                    "ce:GetReservationPurchaseRecommendation",
+                    "ce:GetSavingsPlansPurchaseRecommendation",
+                    "ec2:DescribeVolumes",
+                    "compute-optimizer:GetEC2InstanceRecommendations"
+                  ],
+                  "Resource": "*"
+                }
+                ```
+                
+                ### 🔧 How to Enable:
+                
+                **Option 1: AWS Console**
+                1. Go to [AWS Cost Explorer](https://console.aws.amazon.com/cost-management/home)
+                2. Enable Cost Explorer (if not enabled)
+                3. Navigate to **Recommendations** section
+                4. Wait 24 hours for initial data collection
+                
+                **Option 2: AWS CLI**
+                ```bash
+                # Enable Cost Explorer
+                aws ce enable-cost-explorer
+                
+                # Create IAM policy
+                aws iam create-policy \\
+                  --policy-name CostOptimizationPolicy \\
+                  --policy-document file://policy.json
+                
+                # Attach to your user
+                aws iam attach-user-policy \\
+                  --user-name YOUR_USERNAME \\
+                  --policy-arn arn:aws:iam::ACCOUNT_ID:policy/CostOptimizationPolicy
+                ```
+                
+                ### 💡 Expected Savings:
+                
+                Typical organizations save **15-30%** on their AWS bill through:
+                - Right-sizing: 10-20% savings
+                - Reserved Instances: 30-70% savings  
+                - Unused resources cleanup: 5-15% savings
+                
+                ### 🔄 For Now:
+                Switch to **Demo Mode** to see sample cost optimization recommendations.
+                """)
+                return
+        
+        # We have recommendations - calculate totals and display
         total_monthly_savings = sum(
             float(rec['savings'].replace('$', '').replace(',', '').replace('/month', ''))
             for rec in recommendations
         )
         annual_savings = total_monthly_savings * 12
+        
+        # Check if this is real data
+        demo_mgr = DemoModeManager()
+        if not demo_mgr.is_demo_mode:
+            st.success(f"✅ Found {len(recommendations)} cost optimization opportunities from AWS Cost Explorer")
         
         col1, col2, col3 = st.columns(3)
         
